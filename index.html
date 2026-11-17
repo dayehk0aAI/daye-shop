@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>大葉員購</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-secondary-bg-color, #f1f3f0);
+    --card: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #1c2420);
+    --hint: var(--tg-theme-hint-color, #7b867f);
+    --accent: var(--tg-theme-button-color, #2f7d4f);
+    --on-accent: var(--tg-theme-button-text-color, #ffffff);
+    --danger: var(--tg-theme-destructive-text-color, #c8452f);
+    --line: rgba(128, 128, 128, .22);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    padding-bottom: 96px; }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+  header { padding: 14px 16px 6px; }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .02em; }
+  header p { margin: 2px 0 0; color: var(--hint); font-size: 13px; }
+  .tabs { display: flex; gap: 6px; padding: 8px 16px; position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  .tabs button { flex: 1; padding: 9px 0; border-radius: 10px; background: var(--card); color: var(--hint); font-weight: 600; font-size: 15px; }
+  .tabs button.on { background: var(--accent); color: var(--on-accent); }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 16px 10px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips button { flex: none; padding: 5px 13px; border-radius: 99px; border: 1px solid var(--line); font-size: 14px; color: var(--hint); }
+  .chips button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .list { padding: 0 12px; display: grid; gap: 8px; }
+  .item { background: var(--card); border-radius: 14px; padding: 10px; display: flex; gap: 10px; align-items: center; }
+  .item.out { opacity: .5; }
+  .thumb { width: 60px; height: 60px; border-radius: 10px; background: var(--bg) center/cover no-repeat; flex: none;
+    display: grid; place-items: center; font-size: 24px; }
+  .info-col { flex: 1; min-width: 0; }
+  .info-col b { display: block; font-size: 15px; }
+  .info-col small { color: var(--hint); font-size: 12.5px; }
+  .price { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .step { display: flex; align-items: center; gap: 2px; flex: none; }
+  .step button { width: 34px; height: 34px; border-radius: 10px; background: var(--bg); font-size: 20px; line-height: 1; }
+  .step button.add { background: var(--accent); color: var(--on-accent); }
+  .step button:disabled { opacity: .35; }
+  .step span { min-width: 26px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 700; color: #b7791f; background: rgba(183, 121, 31, .13);
+    padding: 1px 7px; border-radius: 99px; vertical-align: 1px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: var(--card); border-top: 1px solid var(--line); display: flex; align-items: center; gap: 12px; z-index: 10; }
+  .bar .sum { flex: 1; }
+  .bar .sum small { color: var(--hint); display: block; font-size: 12px; }
+  .bar .sum b { font-size: 19px; font-variant-numeric: tabular-nums; }
+  .cta { background: var(--accent); color: var(--on-accent); font-weight: 700; padding: 12px 22px; border-radius: 12px; }
+  .cta:disabled { opacity: .4; }
+  .ghost { color: var(--danger); font-size: 14px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; }
+  .mini { background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 700; padding: 6px 12px; border-radius: 9px; }
+  .danger { background: var(--danger); color: #fff; font-weight: 700; }
+  .linkbtn { display: block; width: 100%; margin-top: 10px; padding: 9px; border: 1px dashed var(--line); border-radius: 10px;
+    color: var(--accent); font-weight: 600; font-size: 14px; }
+  .sheet { position: fixed; inset: 0; background: rgba(0,0,0,.42); z-index: 20; display: flex; align-items: flex-end; }
+  .sheet > div { background: var(--card); width: 100%; max-height: 88vh; overflow: auto; border-radius: 18px 18px 0 0;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .sheet h2, .slip h2 { margin: 0 0 6px; font-size: 18px; }
+  .row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .row span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 0 4px; font-weight: 700; font-size: 18px; }
+  .total .amt { font-size: 24px; font-variant-numeric: tabular-nums; }
+  textarea, input, select { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 11px; margin-top: 8px; }
+  textarea { resize: none; height: 62px; }
+  .actions { display: flex; gap: 10px; margin-top: 14px; }
+  .actions button { flex: 1; padding: 12px 0; border-radius: 12px; font-weight: 700; }
+  .actions .sec { background: var(--bg); }
+  .chk { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin-top: 12px; cursor: pointer; }
+  .chk input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; }
+  .info { color: var(--hint); font-size: 13px; margin-top: 8px; }
+  .reqline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--hint); padding: 4px 0 8px; border-bottom: 1px solid var(--line); }
+  .reqline input { margin: 0 0 0 auto; width: 110px; flex: none; padding: 6px 9px; }
+  .reqsum { text-align: right; font-size: 14px; color: var(--accent); font-weight: 600; }
+  .fld { display: block; font-size: 13px; color: var(--hint); margin-top: 10px; }
+  .fld input { margin-top: 4px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  details { margin-top: 12px; font-size: 14px; }
+  summary { color: var(--accent); cursor: pointer; }
+  .order { background: var(--card); border-radius: 14px; padding: 12px; }
+  .order .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .order .top b { font-size: 14px; font-variant-numeric: tabular-nums; }
+  .order .who { font-size: 13px; color: var(--hint); margin-top: 2px; }
+  .badge { font-size: 12.5px; font-weight: 700; padding: 2px 9px; border-radius: 99px; background: var(--bg); color: var(--hint); white-space: nowrap; }
+  .badge.s-待確認價格 { color: #b7791f; } .badge.s-待付款 { color: #c05621; } .badge.s-待查帳 { color: #6b46c1; }
+  .badge.s-待交貨 { color: #2b6cb0; } .badge.s-已交貨 { color: #2f7d4f; } .badge.s-已完成 { color: var(--accent); } .badge.s-已駁回 { color: var(--danger); }
+  .order ul { margin: 8px 0; padding-left: 18px; font-size: 14px; color: var(--hint); }
+  .order .foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; }
+  .order .btns { display: flex; gap: 6px; flex: none; }
+  .note-ok { color: var(--accent); font-size: 14px; margin-bottom: 6px; }
+  .note-bad { color: var(--danger); font-size: 14px; margin-bottom: 6px; }
+  .empty, .center { text-align: center; color: var(--hint); padding: 48px 24px; }
+  .center b { display: block; color: var(--text); font-size: 18px; margin-bottom: 8px; }
+  .center code { display: inline-block; margin-top: 12px; font-size: 22px; padding: 8px 16px; background: var(--card); border-radius: 10px; color: var(--text); user-select: all; }
+  .warn { color: #b7791f; }
+  .proxy { margin: 0 12px 10px; background: var(--card); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
+  .proxy > label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .proxy input[type=checkbox] { width: 18px; height: 18px; margin: 0; }
+  .toast { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); background: rgba(20,20,20,.88); color: #fff;
+    padding: 9px 16px; border-radius: 99px; font-size: 14px; z-index: 30; max-width: 86vw; text-align: center; }
+  .signwrap { padding: 12px; }
+  .slip { background: var(--card); border-radius: 14px; padding: 14px; }
+  .sub { font-size: 13px; color: var(--hint); margin-bottom: 8px; }
+  .lbl { display: block; font-size: 13px; color: var(--hint); margin-top: 14px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .seg button { padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 15px; }
+  .seg button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; }
+  .seg .cashreq { border-style: dashed; color: var(--hint); }
+  .cashnote { font-size: 13px; color: var(--hint); align-self: center; }
+  .paybox { margin-top: 12px; padding: 14px; border-radius: 12px; background: var(--bg); text-align: center; }
+  .paybox .qr { width: min(64vw, 260px); height: auto; background: #fff; padding: 8px; border-radius: 10px; display: block; margin: 0 auto; }
+  .bigamt { font-size: 28px; font-weight: 800; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .bank { font-size: 15px; }
+  .acct { font-size: 24px; font-weight: 800; letter-spacing: .03em; margin-top: 4px; user-select: all; font-variant-numeric: tabular-nums; }
+  .hint2 { color: var(--hint); font-size: 13px; margin-top: 4px; }
+  .okline { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(47, 125, 79, .1); color: #2f7d4f; font-size: 14px; font-weight: 600; }
+  .padbox { position: relative; margin-top: 6px; }
+  #pad { width: 100%; height: 42vh; min-height: 220px; display: block; background: #fff; border: 1.5px dashed #9aa39d; border-radius: 12px; touch-action: none; }
+  .padbox span { position: absolute; left: 0; right: 0; top: 45%; text-align: center; color: #b9c0bb; pointer-events: none; font-size: 15px; }
+  .padbox button { position: absolute; right: 8px; top: 8px; background: #eef0ee; color: #333; border-radius: 8px; padding: 4px 12px; font-size: 14px; }
+  .err { color: var(--danger); font-size: 14px; min-height: 22px; margin-top: 6px; }
+  .pline { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .pname { font-size: 15px; font-weight: 600; }
+  .pmeta { font-size: 13px; color: var(--hint); margin-top: 2px; }
+  .pin { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; color: var(--hint); }
+  .pin input { margin: 0; width: 120px; flex: none; }
+  .psub { margin-left: auto; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app"><div class="center">載入中…</div></div>
+
+<script>
+/* ====== 部署時只要改這一行：貼上 GAS 部署後的 /exec 網址 ====== */
+const API_URL = 'https://script.google.com/macros/s/請貼上部署ID/exec';
+
+const tg = window.Telegram && window.Telegram.WebApp;
+const QS = new URLSearchParams(location.search);
+const DEMO = QS.has('demo');
+const S = { data: null, tab: 'shop', cat: '全部', cart: {}, sheet: '', busy: false,
+            proxyOn: false, proxyType: '一般客人', proxyName: '', note: '', reqOn: false, reqPrices: {}, reqReason: '' };
+const $app = document.getElementById('app');
+const money = n => '$' + Math.round(n).toLocaleString('en-US');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = id => document.getElementById(id);
+
+async function api(action, payload) {
+  if (DEMO) return demoApi(action, payload || {});
+  // 用 text/plain 送出，瀏覽器不會先發 OPTIONS 預檢（GAS 不處理預檢）
+  const res = await fetch(API_URL, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({ action: action, initData: tg ? tg.initData : '' }, payload || {}))
+  });
+  return res.json();
+}
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+function buzz(kind) { try { tg.HapticFeedback.impactOccurred(kind || 'light'); } catch (e) {} }
+function ask(msg) {
+  return new Promise(ok => {
+    if (tg && tg.showConfirm && tg.isVersionAtLeast && tg.isVersionAtLeast('6.2')) tg.showConfirm(msg, ok);
+    else ok(window.confirm(msg));
+  });
+}
+function center(title, msg, btn) {
+  $app.innerHTML = '<div class="center"><b>' + esc(title) + '</b>' + msg + (btn ? '<br><br><button class="cta" id="' + btn[0] + '">' + esc(btn[1]) + '</button>' : '') + '</div>';
+}
+
+// ===================== 選購 =====================
+
+function tierName() { return S.proxyOn ? (S.proxyType === '合作廠商' ? '廠商價' : '一般價') : '員工價'; }
+function priceOf(p) { return S.proxyOn && p.prices ? p.prices[tierName()] : p.price; }
+function cartLines() {
+  return S.data.catalog.filter(p => S.cart[p.sku] > 0).map(p => {
+    const price = priceOf(p), qty = S.cart[p.sku];
+    return { p: p, qty: qty, price: price, sub: price * qty };
+  });
+}
+function cartTotal() { return cartLines().reduce((s, l) => s + l.sub, 0); }
+function wantOf(l) {
+  const v = S.reqPrices[l.p.sku];
+  if (!S.reqOn || v === undefined || v === '') return null;
+  const n = Math.round(Number(v));
+  return n > 0 && n !== l.price ? n : null;
+}
+function needsPriceCheck() { return cartLines().some(l => l.p.isNew || wantOf(l)); }
+
+async function load() {
+  stopPoll();
+  try {
+    const d = await api('init');
+    if (!d.ok) return center('無法開啟員購', esc(d.error));
+    S.data = d;
+    if (d.registered && d.user.proxyOnly) S.proxyOn = true;   // 公司總務帳號只能代客下單
+    if (d.registered) d.catalog.forEach(p => { if (S.cart[p.sku] > p.avail) S.cart[p.sku] = p.avail; });
+    render();
+  } catch (e) { center('無法開啟員購', '連線失敗，請稍後再試'); }
+}
+
+function render() {
+  const d = S.data;
+  if (!d.registered) {
+    $app.innerHTML = '<div class="center"><b>尚未登記</b>您的 Telegram 還沒有登記在員購名單，請把下面這組號碼給管理部：<br><code>' + esc(d.tgId) + '</code></div>';
+    return;
+  }
+  const u = d.user;
+  if (S.tab === 'todo' && !u.canProxy) S.tab = 'shop';
+  let h = '<header><h1>大葉員購</h1><p>' + esc(u.name) + '・' + esc(u.identity) + (u.dept ? '・' + esc(u.dept) : '') + '</p></header>';
+  const tabs = [['shop', '選購'], ['orders', '我的訂單' + (d.orders.length ? '（' + d.orders.length + '）' : '')]];
+  if (u.canProxy) tabs.push(['todo', '待處理' + (d.todo.length ? '（' + d.todo.length + '）' : '')]);
+  h += '<div class="tabs">' + tabs.map(t => '<button data-tab="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>').join('') + '</div>';
+  h += S.tab === 'shop' ? shopHtml() : S.tab === 'todo' ? todoHtml() : ordersHtml();
+  if (S.sheet === 'cart') h += cartSheetHtml();
+  if (S.sheet === 'newprod') h += newProdSheetHtml();
+  $app.innerHTML = h;
+}
+
+function shopHtml() {
+  const d = S.data;
+  let h = '';
+  if (d.user.canProxy) {
+    h += '<div class="proxy"><label><input type="checkbox" id="proxyOn"' + (S.proxyOn ? ' checked' : '') + (d.user.proxyOnly ? ' disabled' : '') + '>代客下單（合作廠商／一般客人）</label>';
+    if (S.proxyOn) {
+      h += '<select id="proxyType"><option' + (S.proxyType === '一般客人' ? ' selected' : '') + '>一般客人</option><option' + (S.proxyType === '合作廠商' ? ' selected' : '') + '>合作廠商</option></select>';
+      if (S.proxyType === '合作廠商' && d.vendors.length) {
+        h += '<select id="proxyName"><option value="">請選擇廠商</option>' + d.vendors.map(v => '<option' + (v === S.proxyName ? ' selected' : '') + '>' + esc(v) + '</option>').join('') + '</select>';
+      } else {
+        h += '<input id="proxyName" placeholder="' + (S.proxyType === '合作廠商' ? '廠商名稱' : '客人姓名／稱呼') + '" value="' + esc(S.proxyName) + '">';
+      }
+    }
+    if (d.user.canCreate) h += '<button class="linkbtn" id="openNew">＋ 新增產品（產品資料裡沒有的）</button>';
+    h += '</div>';
+  }
+  const cats = ['全部'].concat([...new Set(d.catalog.map(p => p.cat))]);
+  if (cats.length > 2) {
+    h += '<div class="chips">' + cats.map(c => '<button data-cat="' + esc(c) + '" class="' + (c === S.cat ? 'on' : '') + '">' + esc(c) + '</button>').join('') + '</div>';
+  }
+  const shown = d.catalog.filter(p => S.cat === '全部' || p.cat === S.cat);
+  if (!shown.length) h += '<div class="empty">目前沒有上架的商品</div>';
+  h += '<div class="list">' + shown.map(p => {
+    const q = S.cart[p.sku] || 0, price = priceOf(p), out = p.avail <= 0 || !(price > 0);
+    return '<div class="item' + (out ? ' out' : '') + '">' +
+      '<div class="thumb"' + (p.img ? ' style="background-image:url(\'' + esc(p.img) + '\')"' : '') + '>' + (p.img ? '' : '📦') + '</div>' +
+      '<div class="info-col"><b>' + esc(p.name) + (p.isNew ? ' <span class="tag">新產品</span>' : '') + '</b><small>' + esc(p.spec) + (p.spec ? '・' : '') + (p.avail > 0 ? '剩 ' + p.avail + esc(p.unit) : '已售完') + '</small>' +
+      '<div class="price">' + (price > 0 ? money(price) + '<small> /' + esc(p.unit) + '</small>' : '未定價') + '</div></div>' +
+      '<div class="step">' + (q > 0 ? '<button data-dec="' + esc(p.sku) + '">−</button><span>' + q + '</span>' : '') +
+      '<button class="add" data-inc="' + esc(p.sku) + '"' + (out || q >= p.avail ? ' disabled' : '') + '>+</button></div></div>';
+  }).join('') + '</div>';
+  const n = cartLines().reduce((s, l) => s + l.qty, 0);
+  h += '<div class="bar"><div class="sum"><small>已選 ' + n + ' 件</small><b>' + money(cartTotal()) + '</b></div>' +
+       '<button class="cta" id="openCart"' + (n ? '' : ' disabled') + '>確認訂單</button></div>';
+  return h;
+}
+
+function cartInfoText() {
+  if (needsPriceCheck()) return '含新產品或申請改價，送出後要先確認價格，確認後才能付款。';
+  return S.proxyOn ? '送出後直接開現場收款頁收款，客人簽名後交貨。' : '送出後就可以付款（轉帳、全支付、台灣Pay），確認收款後交貨。';
+}
+function submitLabel() {
+  if (S.busy) return '送出中…';
+  return needsPriceCheck() ? '送出，等價格確認' : S.proxyOn ? '送出並收款' : '送出訂單';
+}
+function reqTotalText() {
+  return '照希望單價合計 ' + money(cartLines().reduce((s, l) => s + (wantOf(l) || l.price) * l.qty, 0));
+}
+function updateCartMeta() {
+  if ($('cartInfo')) $('cartInfo').textContent = cartInfoText();
+  if ($('submit')) $('submit').textContent = submitLabel();
+  if ($('reqTotal')) $('reqTotal').textContent = reqTotalText();
+}
+
+function cartSheetHtml() {
+  let h = '<div class="sheet" id="sheetBg"><div><h2>確認訂單</h2>';
+  if (S.proxyOn) h += '<div class="row"><span>代客下單</span><span>' + esc(S.proxyType) + '：' + esc(S.proxyName || '（未填）') + '</span></div>';
+  cartLines().forEach(l => {
+    h += '<div class="row"><span>' + esc(l.p.name) + (l.p.isNew ? ' <span class="tag">新產品</span>' : '') + ' × ' + l.qty + '</span><span>' + money(l.sub) + '</span></div>';
+    if (S.reqOn) {
+      h += '<div class="reqline"><span>希望單價（原價 ' + money(l.price) + '）</span><input type="number" inputmode="numeric" min="1" data-req="' + esc(l.p.sku) + '" value="' +
+        esc(S.reqPrices[l.p.sku] === undefined ? '' : S.reqPrices[l.p.sku]) + '" placeholder="' + l.price + '"></div>';
+    }
+  });
+  h += '<div class="total"><span>合計</span><span>' + money(cartTotal()) + '</span></div>';
+  if (S.reqOn) h += '<div class="reqsum" id="reqTotal">' + esc(reqTotalText()) + '</div>';
+  h += '<label class="chk"><input type="checkbox" id="reqOn"' + (S.reqOn ? ' checked' : '') + '><span>申請改價（要寫原因，確認價格後才能付款）</span></label>';
+  if (S.reqOn) h += '<textarea id="reqReason" maxlength="200" placeholder="改價原因（必填），例如：外箱瑕疵、量多">' + esc(S.reqReason) + '</textarea>';
+  h += '<div class="info" id="cartInfo">' + esc(cartInfoText()) + '</div>';
+  h += '<textarea id="note" maxlength="200" placeholder="備註（選填）">' + esc(S.note) + '</textarea>';
+  h += '<div class="actions"><button class="sec" id="closeSheet">再看看</button><button class="cta" id="submit"' + (S.busy ? ' disabled' : '') + '>' + esc(submitLabel()) + '</button></div></div></div>';
+  return h;
+}
+
+function newProdSheetHtml() {
+  const tier = tierName();
+  const others = ['員工價', '廠商價', '一般價'].filter(t => t !== tier);
+  const cats = [...new Set(S.data.catalog.map(p => p.cat))];
+  const fld = (label, id, ph, req, type, extra) => '<label class="fld">' + label + (req ? ' *' : '') +
+    '<input id="' + id + '" type="' + (type || 'text') + '"' + (type === 'number' ? ' inputmode="numeric" min="1"' : '') + ' placeholder="' + esc(ph || '') + '"' + (extra || '') + '></label>';
+  let h = '<div class="sheet" id="sheetBg"><div><h2>新增產品</h2>';
+  h += '<div class="info">產品資料裡找不到才在這裡新增。品號由系統自動編；含新產品的訂單會先送管理者確認價格，確認後就是固定價。</div>';
+  h += fld('品名', 'npName', '例如：不鏽鋼水桶', true);
+  h += fld('規格', 'npSpec', '例如：10L');
+  h += '<div class="two">' + fld('單位', 'npUnit', '個', true, 'text', ' value="個"') + fld('分類', 'npCat', '新增產品', false, 'text', ' list="npCats"') + '</div>';
+  h += '<datalist id="npCats">' + cats.map(c => '<option value="' + esc(c) + '">').join('') + '</datalist>';
+  h += fld(tier + '（這次的售價）', 'npPrice', '', true, 'number');
+  h += '<details><summary>其他售價（選填）</summary>' + others.map(t => fld(t, 'npOther_' + t, '', false, 'number', ' data-tier="' + t + '"')).join('') + '</details>';
+  h += fld('這次要賣的數量', 'npQty', '', true, 'number', ' value="1"');
+  h += '<div class="err" id="npErr"></div>';
+  h += '<div class="actions"><button class="sec" id="closeSheet">取消</button><button class="cta" id="createProd">建立並加入購物車</button></div></div></div>';
+  return h;
+}
+
+function orderCardHtml(o, showBuyer) {
+  return '<div class="order"><div class="top"><b>' + esc(o.id) + '</b><span class="badge s-' + esc(o.status) + '">' + esc(o.status) + '</span></div>' +
+    (showBuyer ? '<div class="who">' + esc(o.identity) + '：' + esc(o.buyer) + '</div>' : '') +
+    '<ul>' + o.lines.map(l => '<li>' + esc(l.name) + ' × ' + l.qty + esc(l.unit) + '</li>').join('') + '</ul>' +
+    (o.reason ? '<div class="note-bad">價格確認未通過：' + esc(o.reason) + '</div>' : '') +
+    (o.hint ? '<div class="note-ok">' + esc(o.hint) + '</div>' : '') +
+    '<div class="foot"><span>' + esc(o.time) + '　<b>' + money(o.total) + '</b>' + (o.pay ? '・' + esc(o.pay) : '') + '</span><span class="btns">' +
+    (o.canCancel && S.tab === 'orders' ? '<button class="ghost" data-cancel="' + esc(o.id) + '">取消</button>' : '') +
+    (o.act ? '<button class="mini" data-pay="' + esc(o.id) + '">' + (o.act === 'collect' ? '現場收款' : '交貨') + '</button>' : '') +
+    '</span></div></div>';
+}
+function ordersHtml() {
+  const os = S.data.orders;
+  if (!os.length) return '<div class="empty">還沒有訂單</div>';
+  return '<div class="list">' + os.map(o => orderCardHtml(o, o.buyer !== S.data.user.name)).join('') + '</div>';
+}
+function todoHtml() {
+  const os = S.data.todo;
+  if (!os.length) return '<div class="empty">目前沒有要收款或交貨的訂單</div>';
+  return '<div class="list">' + os.map(o => orderCardHtml(o, true)).join('') + '</div>';
+}
+
+async function submit() {
+  if (S.busy) return;
+  const lines = cartLines();
+  let priceReq = null;
+  if (S.reqOn) {
+    const prices = {};
+    lines.forEach(l => { const w = wantOf(l); if (w) prices[l.p.sku] = w; });
+    if (Object.keys(prices).length) {
+      if (!S.reqReason.trim()) return toast('申請改價要填寫原因');
+      priceReq = { reason: S.reqReason.trim(), prices: prices };
+    }
+  }
+  S.busy = true; render();   // 按下後立刻停用按鈕，避免重複送出
+  let r;
+  try {
+    r = await api('submit', {
+      items: lines.map(l => ({ sku: l.p.sku, qty: l.qty })), note: S.note, priceReq: priceReq,
+      proxy: S.proxyOn ? { type: S.proxyType, name: S.proxyName.trim() } : null
+    });
+  } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  S.busy = false;
+  if (!r.ok) { S.sheet = ''; toast(r.error); return r.refresh ? load() : render(); }
+  S.cart = {}; S.note = ''; S.sheet = ''; S.proxyName = ''; S.reqOn = false; S.reqPrices = {}; S.reqReason = '';
+  buzz('medium');
+  if (r.next === 'collect') { toast('訂單 ' + r.orderId + ' 已成立，請收款'); return openPay(r.orderId); }
+  toast(r.next === 'price' ? '訂單 ' + r.orderId + ' 已送出，等價格確認' : '訂單 ' + r.orderId + ' 已成立，請到 bot 聊天室付款');
+  S.tab = 'orders';
+  load();
+}
+
+async function createProduct() {
+  const v = id => ($(id) ? $(id).value.trim() : '');
+  const err = $('npErr'), btn = $('createProd');
+  const tier = tierName();
+  const prices = {}; prices[tier] = v('npPrice');
+  document.querySelectorAll('[data-tier]').forEach(i => { if (i.value) prices[i.dataset.tier] = i.value; });
+  const product = { name: v('npName'), spec: v('npSpec'), unit: v('npUnit') || '個', cat: v('npCat'), qty: v('npQty'), prices: prices };
+  if (!product.name) return void (err.textContent = '請填品名');
+  if (!(Number(prices[tier]) > 0)) return void (err.textContent = '請填這次的售價');
+  if (!(Number(product.qty) >= 1)) return void (err.textContent = '這次要賣的數量至少 1');
+  btn.disabled = true; btn.textContent = '建立中…';
+  let r;
+  try { r = await api('newProduct', { product: product }); } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  if (!r.ok) { btn.disabled = false; btn.textContent = '建立並加入購物車'; err.textContent = r.error; return; }
+  S.data.catalog.push(r.product);
+  S.cart[r.product.sku] = Math.min(Number(product.qty), r.product.avail);
+  S.sheet = ''; S.cat = '全部';
+  buzz('medium'); toast('已新增 ' + r.product.name + '（' + r.product.sku + '），已放進購物車');
+  render();
+}
+
+// ===================== 現場收款／簽收頁（大葉總務）=====================
+
+const PAY = { info: null, method: '', inked: false, busy: false, timer: null, polls: 0 };
+function stopPoll() { if (PAY.timer) { clearInterval(PAY.timer); PAY.timer = null; } }
+
+async function openPay(id) {
+  stopPoll();
+  $app.innerHTML = '<div class="center">載入中…</div>';
+  let r;
+  try { r = await api('payInfo', { orderId: id }); } catch (e) { r = { ok: false, error: '連線失敗，請稍後再試' }; }
+  if (!r.ok) return center('無法開啟收款頁', esc(r.error), ['payBack', '回到員購']);
+  Object.assign(PAY, { info: r, method: '', inked: false, busy: false, polls: 0 });
+  renderPay();
+  if (r.cashState === 'pending') startPoll();
+}
+
+function amount() { return money(PAY.info.order.total); }
+function segHtml() {
+  const r = PAY.info;
+  let h = r.methods.map(m => '<button data-method="' + esc(m) + '" class="' + (PAY.method === m ? 'on' : '') + '">' + esc(m) + '</button>').join('');
+  if (r.cashState === 'none') h += '<button id="cashReq" class="cashreq">申請收現金</button>';
+  if (r.cashState === 'pending') h += '<span class="cashnote">現金申請中，等管理者允許…</span>';
+  if (r.cashState === 'denied') h += '<span class="cashnote">不允許收現金</span>';
+  return h;
+}
+function payBoxHtml() {
+  const r = PAY.info, m = PAY.method;
+  if (!m) return '<div class="paybox"><div class="hint2">選好收款方式，這裡會顯示 QR 或帳號給客人看。</div></div>';
+  if (m === '現金') return '<div class="paybox"><div class="bigamt">收現金 ' + amount() + '</div><div class="hint2">現金之後交給管理者</div></div>';
+  if (m === '轉帳') {
+    return '<div class="paybox"><div class="bank">' + esc(r.bank.info) + '</div>' + (r.bank.account ? '<div class="acct">' + esc(r.bank.account) + '</div>' : '') +
+      '<div class="bigamt">應付 ' + amount() + '</div><div class="hint2">客人轉帳後，請看他的轉帳成功畫面</div></div>';
+  }
+  const src = r.qr[m];
+  return '<div class="paybox">' + (src ? '<img class="qr" src="' + src + '" alt="' + esc(m) + ' 收款 QR">' :
+    '<div class="hint2">還沒有設定' + esc(m) + '收款 QR（私訊 bot 傳 QR 圖，說明文字打 /qr）</div>') +
+    '<div class="bigamt">應付 ' + amount() + '</div><div class="hint2">客人掃碼後要自己輸入金額</div></div>';
+}
+function seenText() {
+  return PAY.method === '現金' ? '我已收到現金 ' + amount() : '我已看到客人的付款成功畫面，時間和金額都正確';
+}
+function goLabel() {
+  const r = PAY.info;
+  if (r.mode === 'collect') return r.needSign ? '確認收款、簽收並交貨' : '確認收款並交貨';
+  return r.needSign ? '確認簽收並交貨' : '確認交貨';
+}
+
+function renderPay() {
+  const r = PAY.info, o = r.order, collect = r.mode === 'collect';
+  let h = '<div class="signwrap"><div class="slip">';
+  h += '<h2>' + (collect ? '現場收款' : r.needSign ? '簽收交貨' : '交貨') + '</h2>';
+  h += '<div class="sub">' + esc(o.id) + '　' + esc(o.identity) + '：' + esc(o.buyer) + '</div>';
+  h += o.lines.map(l => '<div class="row"><span>' + esc(l.name) + (l.spec ? ' ' + esc(l.spec) : '') + ' × ' + l.qty + esc(l.unit) + '</span><span>' + money(l.sub) + '</span></div>').join('');
+  h += '<div class="total"><span>' + (collect ? '應收' : '合計') + '</span><span class="amt">' + amount() + '</span></div>';
+  if (collect) {
+    if (o.paidReport) h += '<div class="info">買方回報已付款（' + esc(o.pay) + '），還沒傳截圖；在現場看過付款成功畫面，也可以在這裡直接收款。</div>';
+    h += '<span class="lbl">收款方式</span><div class="seg" id="seg">' + segHtml() + '</div>';
+    h += '<div id="payBox">' + payBoxHtml() + '</div>';
+    h += '<label class="chk" id="seenWrap"' + (PAY.method ? '' : ' hidden') + '><input type="checkbox" id="seen"><span id="seenText">' + esc(seenText()) + '</span></label>';
+  } else {
+    h += '<div class="okline">✅ 已確認收款：' + esc(o.pay) + '（' + esc(o.confirmBy) + '）</div>';
+  }
+  if (r.needSign) {
+    h += '<span class="lbl">經手人（會私訊本人確認）</span><select id="sHandler"><option value="">請選擇</option>' + r.handlers.map(n => '<option>' + esc(n) + '</option>').join('') + '</select>';
+    h += '<span class="lbl">客戶簽名</span><div class="padbox"><canvas id="pad"></canvas><span id="padHint">請客戶在這裡簽名</span><button id="padClear">重簽</button></div>';
+  }
+  h += '<div class="err" id="sErr"></div><div class="actions"><button class="sec" id="payBack">返回</button><button class="cta" id="sGo">' + goLabel() + '</button></div></div></div>';
+  $app.innerHTML = h;
+  if (r.needSign) setupPad();
+}
+
+function pickMethod(m) {
+  PAY.method = m;
+  $('seg').innerHTML = segHtml();
+  $('payBox').innerHTML = payBoxHtml();
+  $('seenWrap').hidden = false;
+  $('seen').checked = false;
+  $('seenText').textContent = seenText();
+  $('sErr').textContent = '';
+}
+
+async function requestCash() {
+  const btn = $('cashReq');
+  if (btn) { btn.disabled = true; btn.textContent = '申請中…'; }
+  let r;
+  try { r = await api('cashRequest', { orderId: PAY.info.order.id }); } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  if (!r.ok) { toast(r.error); if (btn) { btn.disabled = false; btn.textContent = '申請收現金'; } return; }
+  applyCashState(r.cashState);
+  if (r.cashState === 'pending') { toast('已送出申請，管理者允許後這裡會出現「現金」'); startPoll(); }
+}
+function applyCashState(cs) {
+  const r = PAY.info;
+  if (cs === r.cashState) return;
+  r.cashState = cs;
+  if (cs === 'allowed' && r.methods.indexOf('現金') === -1) r.methods.push('現金');
+  if ($('seg')) $('seg').innerHTML = segHtml();
+  if (cs === 'allowed') { buzz('medium'); toast('已允許收現金'); }
+  if (cs === 'denied') toast('管理者不允許收現金，請改用轉帳或掃碼');
+}
+function startPoll() {
+  stopPoll();
+  PAY.timer = setInterval(async () => {
+    if (++PAY.polls > 150) return stopPoll();   // 最多等 10 分鐘
+    let r;
+    try { r = await api('payInfo', { orderId: PAY.info.order.id, light: true }); } catch (e) { return; }
+    if (!r.ok) return stopPoll();
+    applyCashState(r.cashState);
+    if (r.cashState !== 'pending') stopPoll();
+  }, 4000);
+}
+
+function setupPad() {
+  const pad = $('pad'), ctx = pad.getContext('2d');
+  const fit = () => {
+    const b = pad.getBoundingClientRect();
+    pad.width = Math.round(b.width * 2); pad.height = Math.round(b.height * 2);
+    PAY.inked = false; $('padHint').hidden = false;
+  };
+  fit();
+  let down = false;
+  const pos = e => { const b = pad.getBoundingClientRect(); return [(e.clientX - b.left) * pad.width / b.width, (e.clientY - b.top) * pad.height / b.height]; };
+  pad.addEventListener('pointerdown', e => {
+    down = true; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111';
+    const p = pos(e); ctx.beginPath(); ctx.moveTo(p[0], p[1]);
+    try { pad.setPointerCapture(e.pointerId); } catch (x) {}
+    $('padHint').hidden = true; $('sErr').textContent = '';
+  });
+  pad.addEventListener('pointermove', e => { if (!down) return; const p = pos(e); ctx.lineTo(p[0], p[1]); ctx.stroke(); PAY.inked = true; });
+  pad.addEventListener('pointerup', () => { down = false; });
+  pad.addEventListener('pointercancel', () => { down = false; });
+  $('padClear').onclick = fit;
+}
+
+/* 把明細、收款、簽名畫成一張簽單圖片（白底黑字），回傳 JPEG data URL */
+function composeSlip(pad, method, handler, confirmBy) {
+  const r = PAY.info, o = r.order, W = 1000, LH = 46, sigH = Math.round((W - 80) * pad.height / pad.width);
+  const c = document.createElement('canvas');
+  c.width = W; c.height = 250 + o.lines.length * LH + 200 + sigH + 110;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, c.height); g.fillStyle = '#111'; g.textBaseline = 'top';
+  const F = '"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
+  let y = 40;
+  g.font = 'bold 44px ' + F; g.fillText('大葉員購 簽收單', 40, y); y += 66;
+  g.font = '30px ' + F;
+  g.fillText('訂單編號：' + o.id, 40, y); y += LH;
+  g.fillText(o.identity + '：' + o.buyer, 40, y); y += LH;
+  g.fillText('簽收時間：' + new Date().toLocaleString('zh-TW', { hour12: false }), 40, y); y += LH + 10;
+  g.fillRect(40, y, W - 80, 2); y += 14;
+  o.lines.forEach(l => {
+    g.textAlign = 'left'; g.fillText(l.name + (l.spec ? ' ' + l.spec : '') + '  ' + money(l.price) + ' × ' + l.qty + l.unit, 40, y);
+    g.textAlign = 'right'; g.fillText(money(l.sub), W - 40, y); y += LH;
+  });
+  g.fillRect(40, y + 4, W - 80, 2); y += 18;
+  g.font = 'bold 34px ' + F; g.textAlign = 'left'; g.fillText('合計', 40, y);
+  g.textAlign = 'right'; g.fillText(money(o.total), W - 40, y); y += 58;
+  g.font = '30px ' + F; g.textAlign = 'left';
+  g.fillText('收款：' + method + '　確認：' + confirmBy, 40, y); y += LH;
+  g.fillText('交貨：' + r.deliverer + '　經手人：' + handler, 40, y); y += LH + 10;
+  g.fillText('客戶簽名：', 40, y); y += LH;
+  g.strokeStyle = '#999'; g.lineWidth = 2; g.strokeRect(40, y, W - 80, sigH);
+  g.drawImage(pad, 40, y, W - 80, sigH);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+
+async function submitPay() {
+  if (PAY.busy) return;
+  const r = PAY.info, o = r.order, collect = r.mode === 'collect';
+  const err = $('sErr'), btn = $('sGo');
+  err.textContent = '';
+  const method = collect ? PAY.method : o.pay;
+  if (collect && !method) return void (err.textContent = '請選擇收款方式');
+  if (collect && !$('seen').checked) return void (err.textContent = method === '現金' ? '請勾選「已收到現金」' : '請勾選「已看到付款成功畫面」');
+  let handler = '', image = '';
+  if (r.needSign) {
+    handler = $('sHandler').value;
+    if (!handler) return void (err.textContent = '請選擇經手人');
+    if (!PAY.inked) return void (err.textContent = '請先讓客戶簽名');
+    image = composeSlip($('pad'), method, handler, collect ? r.deliverer + '（現場）' : o.confirmBy);
+  }
+  PAY.busy = true; btn.disabled = true; btn.textContent = '送出中…';   // 按下後立刻停用，避免重複送出
+  let res;
+  try { res = await api('collect', { orderId: o.id, method: collect ? method : '', seen: collect, handler: handler, image: image }); }
+  catch (e) { res = { ok: false, error: '連線失敗，請再試一次' }; }
+  PAY.busy = false;
+  if (!res.ok) { btn.disabled = false; btn.textContent = goLabel(); err.textContent = res.error; return; }
+  stopPoll(); buzz('medium');
+  const warn = (res.warnings || []).filter(Boolean);
+  center(r.needSign ? '已簽收並交貨' : '已交貨',
+    '訂單 ' + esc(o.id) + '　' + esc(method) + ' ' + amount() +
+    (r.needSign ? '<br>簽單已送給管理者和主管，經手人 ' + esc(handler) + ' 會收到確認訊息。' : '') +
+    (method === '現金' ? '<br>請把現金交給管理者。' : '') +
+    (warn.length ? '<br><span class="warn">' + warn.map(esc).join('<br>') + '</span>' : ''),
+    ['payBack', '回到員購']);
+}
+
+// ===================== 價格確認頁（管理者、代理人）=====================
+
+const PRICE = { info: null, busy: false };
+
+async function openPrice(id) {
+  $app.innerHTML = '<div class="center">載入中…</div>';
+  let r;
+  try { r = await api('priceInfo', { orderId: id }); } catch (e) { r = { ok: false, error: '連線失敗，請稍後再試' }; }
+  if (!r.ok) return center('無法開啟價格確認', esc(r.error), ['prClose', '關閉']);
+  PRICE.info = r; PRICE.busy = false;
+  renderPrice();
+}
+
+function priceInputs() { return [...document.querySelectorAll('[data-pi]')]; }
+function priceTotal() {
+  const o = PRICE.info.order;
+  return o.lines.reduce((s, l, i) => { const inp = priceInputs()[i]; return s + Math.round(Number(inp ? inp.value : l.price) || 0) * l.qty; }, 0);
+}
+function renderPrice() {
+  const r = PRICE.info, o = r.order;
+  let h = '<div class="signwrap"><div class="slip"><h2>價格確認</h2>';
+  h += '<div class="sub">' + esc(o.id) + '　' + esc(o.identity) + '：' + esc(o.buyer) + (o.proxyBy ? '　代客下單：' + esc(o.proxyBy) : '') + '</div>';
+  if (o.reason) h += '<div class="okline" style="background:rgba(183,121,31,.12);color:#8a5a12">改價原因：' + esc(o.reason) + '</div>';
+  h += o.lines.map((l, i) => {
+    const start = l.req || l.price;
+    return '<div class="pline"><div class="pname">' + (l.isNew ? '<span class="tag">新產品</span> ' : '') + esc(l.name) + (l.spec ? ' ' + esc(l.spec) : '') + ' × ' + l.qty + esc(l.unit) + '</div>' +
+      '<div class="pmeta">' + (l.isNew ? '總務填的價格 ' : '原價 ') + money(l.orig || l.price) + (l.req ? '　申請 <b>' + money(l.req) + '</b>' : '') + '</div>' +
+      '<div class="pin"><span>確認單價</span><input type="number" inputmode="numeric" min="1" data-pi="' + i + '" value="' + start + '"><span class="psub" id="psub' + i + '">' + money(start * l.qty) + '</span></div></div>';
+  }).join('');
+  h += '<div class="total"><span>合計（' + esc(o.tier) + '）</span><span class="amt" id="pTotal">' + money(o.lines.reduce((s, l) => s + (l.req || l.price) * l.qty, 0)) + '</span></div>';
+  if (o.lines.some(l => l.isNew)) h += '<div class="info">新產品確認後的價格會寫回產品資料，之後就是固定價。</div>';
+  if (o.lines.some(l => l.req)) h += '<div class="info">申請改價只改這一張單，不會改產品資料。</div>';
+  h += '<div class="err" id="pErr"></div><div class="actions"><button class="cta" id="prConfirm">確認價格</button></div>';
+  h += '<details><summary>駁回這張訂單</summary><select id="prReason">' + r.reasons.map(x => '<option>' + esc(x) + '</option>').join('') +
+    '</select><div class="actions"><button class="danger" id="prReject">駁回</button></div></details>';
+  h += '</div></div>';
+  $app.innerHTML = h;
+}
+
+async function confirmPrice() {
+  if (PRICE.busy) return;
+  const o = PRICE.info.order, prices = {};
+  const inputs = priceInputs();
+  for (let i = 0; i < o.lines.length; i++) {
+    const v = Math.round(Number(inputs[i].value));
+    if (!(v > 0)) return void ($('pErr').textContent = o.lines[i].name + ' 的單價要大於 0');
+    prices[o.lines[i].sku] = v;
+  }
+  PRICE.busy = true; $('prConfirm').disabled = true; $('prConfirm').textContent = '送出中…';
+  let r;
+  try { r = await api('priceConfirm', { orderId: o.id, prices: prices }); } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  PRICE.busy = false;
+  if (!r.ok) { $('prConfirm').disabled = false; $('prConfirm').textContent = '確認價格'; $('pErr').textContent = r.error; return; }
+  buzz('medium');
+  center('價格已確認', '訂單 ' + esc(o.id) + '　合計 ' + money(r.total) + '<br>已通知' + (o.proxyBy ? '大葉總務收款' : '買方付款') + '。', ['prClose', '關閉']);
+}
+
+async function rejectPrice() {
+  if (PRICE.busy) return;
+  const o = PRICE.info.order, reason = $('prReason').value;
+  if (!(await ask('確定要駁回訂單 ' + o.id + ' 嗎？（' + reason + '）'))) return;
+  PRICE.busy = true;
+  let r;
+  try { r = await api('priceReject', { orderId: o.id, reason: reason }); } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  PRICE.busy = false;
+  if (!r.ok) return void ($('pErr').textContent = r.error);
+  center('已駁回', '訂單 ' + esc(o.id) + '：' + esc(reason), ['prClose', '關閉']);
+}
+
+// ===================== 事件 =====================
+
+$app.addEventListener('click', async e => {
+  const t = e.target.closest('button, #sheetBg');
+  if (!t) return;
+  const ds = t.dataset;
+  if (ds.tab) { S.tab = ds.tab; S.sheet = ''; if (ds.tab !== 'shop') load(); return render(); }
+  if (ds.cat) { S.cat = ds.cat; return render(); }
+  if (ds.inc) { S.cart[ds.inc] = (S.cart[ds.inc] || 0) + 1; buzz(); return render(); }
+  if (ds.dec) { S.cart[ds.dec] = Math.max(0, (S.cart[ds.dec] || 0) - 1); buzz(); return render(); }
+  if (t.id === 'openCart') {
+    if (S.proxyOn && !S.proxyName.trim()) return toast('請先填寫代客下單的對象');
+    S.sheet = 'cart'; return render();
+  }
+  if (t.id === 'openNew') { S.sheet = 'newprod'; return render(); }
+  if (t.id === 'closeSheet' || (t.id === 'sheetBg' && e.target === t)) { S.sheet = ''; return render(); }
+  if (t.id === 'submit') return submit();
+  if (t.id === 'createProd') return createProduct();
+  if (ds.cancel) {
+    if (!(await ask('確定要取消訂單 ' + ds.cancel + ' 嗎？'))) return;
+    const r = await api('cancel', { orderId: ds.cancel });
+    toast(r.ok ? '已取消' : r.error);
+    return load();
+  }
+  if (ds.pay) return openPay(ds.pay);
+  if (ds.method) return pickMethod(ds.method);
+  if (t.id === 'cashReq') return requestCash();
+  if (t.id === 'sGo') return submitPay();
+  if (t.id === 'payBack') { stopPoll(); S.tab = 'todo'; S.sheet = ''; return load(); }
+  if (t.id === 'prConfirm') return confirmPrice();
+  if (t.id === 'prReject') return rejectPrice();
+  if (t.id === 'prClose') { if (tg && tg.close && !DEMO) return tg.close(); return load(); }
+});
+$app.addEventListener('change', e => {
+  const id = e.target.id;
+  if (id === 'proxyOn') { S.proxyOn = e.target.checked; S.proxyName = ''; render(); }
+  if (id === 'proxyType') { S.proxyType = e.target.value; S.proxyName = ''; render(); }
+  if (id === 'proxyName') S.proxyName = e.target.value;
+  if (id === 'reqOn') { S.reqOn = e.target.checked; render(); }
+});
+$app.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'proxyName') S.proxyName = t.value;
+  if (t.id === 'note') S.note = t.value;
+  if (t.id === 'reqReason') S.reqReason = t.value;
+  if (t.dataset.req !== undefined) { S.reqPrices[t.dataset.req] = t.value; updateCartMeta(); }
+  if (t.dataset.pi !== undefined) {
+    const l = PRICE.info.order.lines[Number(t.dataset.pi)];
+    $('psub' + t.dataset.pi).textContent = money(Math.round(Number(t.value) || 0) * l.qty);
+    $('pTotal').textContent = money(priceTotal());
+  }
+});
+
+// ===================== 預覽用假資料：網址加 ?demo 就能在一般瀏覽器看畫面 =====================
+// ?demo（員工）、?demo&as=dl（大葉總務）、?demo&pay=EP261117-004（收款頁）、?demo&price=EP261117-005（價格確認頁）
+const DEMO_QR = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/><path fill-rule="evenodd" d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2z"/><path d="M9 0h1v1H9zM11 0h1v1h-1zM12 1h1v1h-1zM8 2h1v1H8zM10 2h1v1h-1zM9 3h1v1H9zM12 3h1v1h-1zM8 4h1v1H8zM11 4h1v1h-1zM10 5h1v1h-1zM9 6h1v1H9zM12 6h1v1h-1zM0 9h1v1H0zM2 8h1v1H2zM4 9h1v1H4zM6 10h1v1H6zM1 11h1v1H1zM3 12h1v1H3zM5 11h1v1H5zM8 8h1v1H8zM10 9h1v1h-1zM12 8h1v1h-1zM9 10h1v1H9zM11 11h1v1h-1zM13 9h1v1h-1zM15 8h1v1h-1zM17 9h1v1h-1zM19 8h1v1h-1zM20 10h1v1h-1zM16 11h1v1h-1zM18 12h1v1h-1zM14 12h1v1h-1zM8 13h1v1H8zM10 14h1v1h-1zM12 15h1v1h-1zM9 16h1v1H9zM11 17h1v1h-1zM13 18h1v1h-1zM8 19h1v1H8zM10 20h1v1h-1zM12 19h1v1h-1zM15 14h1v1h-1zM17 15h1v1h-1zM19 14h1v1h-1zM16 16h1v1h-1zM18 17h1v1h-1zM20 16h1v1h-1zM14 18h1v1h-1zM16 19h1v1h-1zM18 20h1v1h-1zM20 19h1v1h-1zM15 20h1v1h-1z"/></svg>');
+const AS_DL = QS.get('as') === 'dl';
+const demoDb = {
+  catalog: [
+    { sku: 'G-101', cat: '剪定工具', name: '修枝剪 8 吋', spec: 'SK5 刀刃', unit: '支', img: '', avail: 12, isNew: false, prices: { '員工價': 280, '廠商價': 330, '一般價': 420 } },
+    { sku: 'G-102', cat: '剪定工具', name: '高枝剪', spec: '伸縮 2–3 m', unit: '支', img: '', avail: 3, isNew: false, prices: { '員工價': 950, '廠商價': 1100, '一般價': 1380 } },
+    { sku: 'G-201', cat: '手工具', name: '園藝鏟三件組', spec: '不鏽鋼', unit: '組', img: '', avail: 20, isNew: false, prices: { '員工價': 360, '廠商價': 420, '一般價': 520 } },
+    { sku: 'G-202', cat: '手工具', name: '除草鐮刀', spec: '', unit: '支', img: '', avail: 0, isNew: false, prices: { '員工價': 150, '廠商價': 180, '一般價': 220 } },
+    { sku: 'G-301', cat: '澆灌', name: '伸縮水管 15 m', spec: '附七段噴頭', unit: '條', img: '', avail: 6, isNew: false, prices: { '員工價': 490, '廠商價': 560, '一般價': 690 } }
+  ],
+  orders: [
+    { id: 'EP261117-002', time: '11/17 15:20', buyer: '示範員工', identity: '在職', total: 640, pay: '轉帳', status: '待查帳', reason: '', hint: '已收到付款截圖，等待查帳', act: '', canCancel: false, lines: [{ name: '修枝剪 8 吋', qty: 1, unit: '支' }, { name: '園藝鏟三件組', qty: 1, unit: '組' }] },
+    { id: 'EP261116-001', time: '11/16 09:05', buyer: '示範員工', identity: '在職', total: 150, pay: '', status: '已駁回', reason: '價格不同意', hint: '', act: '', canCancel: false, lines: [{ name: '除草鐮刀', qty: 1, unit: '支' }] }
+  ],
+  todo: [
+    { id: 'EP261117-004', time: '11/17 14:02', buyer: '王先生', identity: '一般客人', total: 1530, pay: '', status: '待付款', reason: '', hint: '可以現場收款', act: 'collect', canCancel: true, lines: [{ name: '修枝剪 8 吋', qty: 2, unit: '支' }, { name: '伸縮水管 15 m', qty: 1, unit: '條' }] },
+    { id: 'EP261117-003', time: '11/17 11:40', buyer: '員工丁', identity: '在職', total: 950, pay: '轉帳', status: '待交貨', reason: '', hint: '已確認收款，等總務交貨', act: 'deliver', canCancel: false, lines: [{ name: '高枝剪', qty: 1, unit: '支' }] }
+  ],
+  cash: 'none', polls: 0
+};
+function demoApi(action, p) {
+  const tier = AS_DL ? '一般價' : '員工價';
+  const R = x => Promise.resolve(x);
+  if (action === 'init') return R({ ok: true, registered: true,
+    user: AS_DL ? { name: '大葉總務', identity: '總務帳號', dept: '', canProxy: true, proxyOnly: true, canCreate: true } : { name: '示範員工', identity: '在職', dept: '辦公室', canProxy: false },
+    vendors: ['廠商辛'], catalog: demoDb.catalog.map(c => Object.assign({}, c, { price: c.prices['員工價'] }, AS_DL ? {} : { prices: undefined })),
+    orders: demoDb.orders, todo: AS_DL ? demoDb.todo : [] });
+  if (action === 'submit') {
+    const id = 'EP261117-0' + (10 + demoDb.orders.length);
+    const lines = p.items.map(i => { const c = demoDb.catalog.find(x => x.sku === i.sku); return { name: c.name, qty: i.qty, unit: c.unit, sub: c.prices[p.proxy ? (p.proxy.type === '合作廠商' ? '廠商價' : '一般價') : '員工價'] * i.qty, isNew: c.isNew }; });
+    const total = lines.reduce((s, l) => s + l.sub, 0);
+    const price = !!p.priceReq || lines.some(l => l.isNew);
+    demoDb.orders.unshift({ id: id, time: '11/17 18:50', buyer: p.proxy ? p.proxy.name : '示範員工', identity: p.proxy ? p.proxy.type : '在職', total: total, pay: '', status: price ? '待確認價格' : '待付款', reason: '', hint: price ? '等待價格確認，確認後就可以付款' : '請到 bot 聊天室付款，或到總務那裡現場付款', act: '', canCancel: true, lines: lines });
+    return R({ ok: true, orderId: id, total: total, next: price ? 'price' : (p.proxy ? 'collect' : 'pay') });
+  }
+  if (action === 'newProduct') {
+    const sku = 'NEW-00' + (demoDb.catalog.filter(c => c.isNew).length + 1);
+    const prices = { '員工價': 0, '廠商價': 0, '一般價': 0 }; Object.keys(p.product.prices).forEach(k => { prices[k] = Number(p.product.prices[k]) || 0; });
+    const item = { sku: sku, cat: p.product.cat || '新增產品', name: p.product.name, spec: p.product.spec, unit: p.product.unit, img: '', avail: Number(p.product.qty), isNew: true, prices: prices, price: prices['員工價'] };
+    demoDb.catalog.push(item);
+    return R({ ok: true, product: item });
+  }
+  if (action === 'payInfo') {
+    if (p.light) { if (demoDb.cash === 'pending' && ++demoDb.polls >= 2) demoDb.cash = 'allowed'; return R({ ok: true, mode: 'collect', needSign: true, cashState: demoDb.cash }); }
+    return R({ ok: true, mode: 'collect', needSign: true, cashState: demoDb.cash, deliverer: '大葉總務', handlers: ['主管甲', '主管乙'],
+      methods: ['轉帳', '全支付', '台灣Pay'].concat(demoDb.cash === 'allowed' ? ['現金'] : []), qr: { '全支付': DEMO_QR, '台灣Pay': DEMO_QR },
+      bank: { info: '國泰世華 013　大葉股份有限公司', account: '1234-5678-9012' },
+      order: { id: p.orderId, buyer: '王先生', identity: '一般客人', total: 1530, pay: '', paidReport: false, confirmBy: '',
+        lines: [{ name: '修枝剪 8 吋', spec: 'SK5 刀刃', qty: 2, unit: '支', price: 420, sub: 840 }, { name: '伸縮水管 15 m', spec: '', qty: 1, unit: '條', price: 690, sub: 690 }] } });
+  }
+  if (action === 'cashRequest') { demoDb.cash = 'pending'; demoDb.polls = 0; return R({ ok: true, cashState: 'pending' }); }
+  if (action === 'collect') { window.__slip = p.image; return R({ ok: true, orderId: p.orderId, warnings: [] }); }
+  if (action === 'priceInfo') return R({ ok: true, reasons: ['價格不同意', '此商品暫不開放購買', '庫存不足', '其他（請洽管理部）'],
+    order: { id: p.orderId, buyer: '廠商辛', identity: '合作廠商', proxyBy: '大葉總務', tier: '廠商價', reason: '老客戶，量多', total: 2600,
+      lines: [{ sku: 'NEW-001', name: '不鏽鋼水桶', spec: '10L', unit: '個', qty: 4, price: 300, orig: 300, req: 0, isNew: true },
+              { sku: 'G-102', name: '高枝剪', spec: '伸縮 2–3 m', unit: '支', qty: 1, price: 1100, orig: 1100, req: 950, isNew: false }] } });
+  if (action === 'priceConfirm') return R({ ok: true, total: Object.keys(p.prices).reduce((s, k) => s + p.prices[k] * (k === 'NEW-001' ? 4 : 1), 0) });
+  if (action === 'priceReject') return R({ ok: true });
+  if (action === 'cancel') { const o = demoDb.orders.find(x => x.id === p.orderId); if (o) { o.status = '已取消'; o.canCancel = false; o.hint = ''; } return R({ ok: true }); }
+  return R({ ok: false, error: '示範模式沒有這個動作' });
+}
+
+// ===================== 啟動 =====================
+if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+const SP = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+const ROUTE = /^pay_/.test(SP) ? ['pay', SP.slice(4)] : /^price_/.test(SP) ? ['price', SP.slice(6)]
+  : QS.get('pay') ? ['pay', QS.get('pay')] : QS.get('price') ? ['price', QS.get('price')] : null;
+if (!DEMO && (!tg || !tg.initData)) center('無法開啟員購', '請從 Telegram 的員購 bot 開啟這個頁面');
+else if (ROUTE && ROUTE[0] === 'pay') openPay(ROUTE[1]);
+else if (ROUTE && ROUTE[0] === 'price') openPrice(ROUTE[1]);
+else load();
+</script>
+</body>
+</html>
