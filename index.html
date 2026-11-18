@@ -186,6 +186,9 @@ const QS = new URLSearchParams(location.search);
 // Android 的 Telegram 不支援 <input capture> 開相機（只會開相簿），改用 App 內相機；iPhone、電腦用系統選擇器
 const PLATFORM = String((tg && tg.platform) || QS.get('platform') || '');
 const IN_APP_CAM = /^android/.test(PLATFORM);
+// 拍照、選照片存檔的大小：長邊像素、JPEG 品質。由後端的指令碼屬性 PHOTO_MAX_PX、PHOTO_QUALITY 決定，這裡是預設值
+let PHOTO = { max: 1280, q: 0.75 };
+function setPhotoCfg(c) { if (c && c.max > 0 && c.q > 0) PHOTO = { max: c.max, q: c.q }; }
 const DEMO = QS.has('demo');
 const S = { data: null, tab: 'shop', cat: '全部', cart: {}, sheet: '', busy: false,
             proxyOn: false, proxyType: '一般客人', proxyName: '', note: '', reqOn: false, reqPrices: {}, reqReason: '', npPhoto: '' };
@@ -283,6 +286,7 @@ async function load() {
     const d = await api('init');
     if (!d.ok) return center('無法開啟員購', esc(d.error));
     S.data = d;
+    setPhotoCfg(d.photo);
     if (d.registered && d.user.proxyOnly) S.proxyOn = true;   // 公司總務帳號只能代客下單
     if (d.registered) d.catalog.forEach(p => { if (S.cart[p.sku] > p.avail) S.cart[p.sku] = p.avail; });
     render();
@@ -489,6 +493,7 @@ async function openPay(id) {
   let r;
   try { r = await api('payInfo', { orderId: id }); } catch (e) { r = { ok: false, error: '連線失敗，請稍後再試' }; }
   if (!r.ok) return center('無法開啟收款頁', esc(r.error), ['payBack', '回到員購']);
+  setPhotoCfg(r.photo);
   Object.assign(PAY, { info: r, method: '', inked: false, busy: false, polls: 0, photo: '', photoNote: '' });
   renderPay();
   if (r.cashState === 'pending') startPoll();
@@ -825,7 +830,7 @@ async function onPicked(e, fromCamera) {
   if (!f) return;
   const target = PICK;
   let data;
-  try { data = await shrinkImage(f, target === '__delivery' ? 1600 : 1280, target === '__delivery' ? 0.8 : 0.82); } catch (x) { return toast(x.message); }
+  try { data = await shrinkImage(f, PHOTO.max, PHOTO.q); } catch (x) { return toast(x.message); }
   usePhoto(target, data, fromCamera ? '' : albumNote(f));
 }
 $('pickFile').addEventListener('change', e => onPicked(e, false));
@@ -882,11 +887,11 @@ function closeCamera() {
 function snap() {
   const v = $('camVideo');
   if (!v.videoWidth) return toast('相機還沒準備好');
-  const k = Math.min(1, 1600 / Math.max(v.videoWidth, v.videoHeight));
+  const k = Math.min(1, PHOTO.max / Math.max(v.videoWidth, v.videoHeight));
   const c = document.createElement('canvas');
   c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
   c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-  const target = CAM.target, data = c.toDataURL('image/jpeg', 0.82);
+  const target = CAM.target, data = c.toDataURL('image/jpeg', PHOTO.q);
   closeCamera(); buzz('medium');
   usePhoto(target, data, '');
 }
