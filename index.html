@@ -152,13 +152,29 @@
   .vh { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
   .zoom { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.85); display: grid; place-items: center; padding: 16px; }
   .zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; background: #fff; }
+  .pickrow { display: flex; gap: 8px; } .pickrow .pickbtn { flex: 1; }
+  .dnote { margin-top: 8px; font-size: 13px; color: #b26a00; }
+  .altpick { display: block; text-align: center; font-size: 13px; color: var(--hint); margin-top: 8px; text-decoration: underline; cursor: pointer; }
+  .camov { position: fixed; inset: 0; z-index: 50; background: #000; display: flex; flex-direction: column; }
+  .camov video { flex: 1; width: 100%; min-height: 0; object-fit: contain; background: #000; }
+  .cambar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px calc(18px + env(safe-area-inset-bottom)); }
+  .camtxt { color: #fff; font-size: 16px; padding: 10px 6px; min-width: 70px; text-align: center; cursor: pointer; background: none; }
+  .shutter { width: 72px; height: 72px; border-radius: 50%; background: #fff; border: 6px solid rgba(255,255,255,.4); background-clip: padding-box; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <div id="app"><div class="center">載入中…</div></div>
-<input type="file" id="pickProduct" class="vh" accept="image/*">
-<input type="file" id="pickDelivery" class="vh" accept="image/*" capture="environment">
+<input type="file" id="pickFile" class="vh" accept="image/*">
+<input type="file" id="pickCam" class="vh" accept="image/*" capture="environment">
+<div class="camov" id="camOv" hidden>
+  <video id="camVideo" autoplay playsinline muted></video>
+  <div class="cambar">
+    <button id="camCancel" class="camtxt">取消</button>
+    <button id="camShot" class="shutter" aria-label="拍照"></button>
+    <label id="camAlbum" class="camtxt" for="pickFile" data-pick="">🖼 相簿</label>
+  </div>
+</div>
 <div class="zoom" id="zoom" hidden><img alt="產品照片"></div>
 
 <script>
@@ -167,6 +183,9 @@ const API_URL = 'https://script.google.com/macros/s/AKfycby0-FDYhS1sL3MKNjQRSFIA
 
 const tg = window.Telegram && window.Telegram.WebApp;
 const QS = new URLSearchParams(location.search);
+// Android 的 Telegram 不支援 <input capture> 開相機（只會開相簿），改用 App 內相機；iPhone、電腦用系統選擇器
+const PLATFORM = String((tg && tg.platform) || QS.get('platform') || '');
+const IN_APP_CAM = /^android/.test(PLATFORM);
 const DEMO = QS.has('demo');
 const S = { data: null, tab: 'shop', cat: '全部', cart: {}, sheet: '', busy: false,
             proxyOn: false, proxyType: '一般客人', proxyName: '', note: '', reqOn: false, reqPrices: {}, reqReason: '', npPhoto: '' };
@@ -186,6 +205,13 @@ function imgHtml(url, zoom) {
   if (!url) return '';
   return '<img src="' + esc(url) + '" alt="" loading="lazy" onerror="imgErr(this)"' + (zoom ? ' data-zoom="1"' : '') + '>';
 }
+function camBtn(target, text, cls, id) {
+  const idAttr = id ? ' id="' + id + '"' : '';
+  return IN_APP_CAM
+    ? '<button class="' + cls + '"' + idAttr + ' data-cam="' + esc(target) + '">' + text + '</button>'
+    : '<label class="' + cls + '"' + idAttr + ' for="' + (target === '__delivery' ? 'pickCam' : 'pickFile') + '" data-pick="' + esc(target) + '">' + text + '</label>';
+}
+function albumBtn(target, text, cls) { return '<label class="' + cls + '" for="pickFile" data-pick="' + esc(target) + '">' + text + '</label>'; }
 function shotInner(src, empty) { return src ? '<img src="' + esc(src) + '" alt="">' : '<div class="none">' + esc(empty || '還沒拍') + '</div>'; }
 function showZoom(src) { const z = $('zoom'); z.querySelector('img').src = src; z.hidden = false; }
 // 手機照片先縮小再上傳（長邊 maxSide 像素、JPEG）
@@ -307,7 +333,7 @@ function shopHtml() {
     const q = S.cart[p.sku] || 0, price = priceOf(p), out = p.avail <= 0 || !(price > 0);
     return '<div class="item' + (out ? ' out' : '') + '">' +
       '<div class="thumbwrap"><div class="thumb">📦' + imgHtml(p.img, true) + (p.uploading ? '<span class="up">上傳中…</span>' : '') + '</div>' +
-      (d.user.canPhoto ? '<label class="cam" for="pickProduct" data-pick="' + esc(p.sku) + '" title="換產品照片">📷</label>' : '') + '</div>' +
+      (d.user.canPhoto ? camBtn(p.sku, '📷', 'cam') : '') + '</div>' +
       '<div class="info-col"><b>' + esc(p.name) + (p.isNew ? ' <span class="tag">新產品</span>' : '') + '</b><small>' + esc(p.spec) + (p.spec ? '・' : '') + (p.avail > 0 ? '剩 ' + p.avail + esc(p.unit) : '已售完') + '</small>' +
       '<div class="price">' + (price > 0 ? money(price) + '<small> /' + esc(p.unit) + '</small>' : '未定價') + '</div></div>' +
       '<div class="step">' + (q > 0 ? '<button data-dec="' + esc(p.sku) + '">−</button><span>' + q + '</span>' : '') +
@@ -372,7 +398,8 @@ function newProdSheetHtml() {
   h += '<details><summary>其他售價（選填）</summary>' + others.map(t => fld(t, 'npOther_' + t, '', false, 'number', ' data-tier="' + t + '"')).join('') + '</details>';
   h += fld('這次要賣的數量', 'npQty', '', true, 'number', ' value="1"');
   h += '<span class="lbl">產品照片（選填，之後也可以在產品上按 📷 補）</span><div class="shot" id="npShot">' + shotInner(S.npPhoto, '還沒有照片') + '</div>';
-  h += '<label class="pickbtn" for="pickProduct" data-pick="__new" id="npPick">' + (S.npPhoto ? '📷 換一張' : '📷 拍照或選照片') + '</label>';
+  h += IN_APP_CAM ? '<div class="pickrow">' + camBtn('__new', '📷 拍照', 'pickbtn') + albumBtn('__new', '🖼 從相簿選', 'pickbtn') + '</div>'
+    : albumBtn('__new', '📷 拍照或選照片', 'pickbtn');
   h += '<div class="err" id="npErr"></div>';
   h += '<div class="actions"><button class="sec" id="closeSheet">取消</button><button class="cta" id="createProd">建立並加入購物車</button></div></div></div>';
   return h;
@@ -453,7 +480,7 @@ async function createProduct() {
 
 // ===================== 現場收款／簽收頁（大葉總務）=====================
 
-const PAY = { info: null, method: '', inked: false, busy: false, timer: null, polls: 0, photo: '' };
+const PAY = { info: null, method: '', inked: false, busy: false, timer: null, polls: 0, photo: '', photoNote: '' };
 function stopPoll() { if (PAY.timer) { clearInterval(PAY.timer); PAY.timer = null; } }
 
 async function openPay(id) {
@@ -462,7 +489,7 @@ async function openPay(id) {
   let r;
   try { r = await api('payInfo', { orderId: id }); } catch (e) { r = { ok: false, error: '連線失敗，請稍後再試' }; }
   if (!r.ok) return center('無法開啟收款頁', esc(r.error), ['payBack', '回到員購']);
-  Object.assign(PAY, { info: r, method: '', inked: false, busy: false, polls: 0, photo: '' });
+  Object.assign(PAY, { info: r, method: '', inked: false, busy: false, polls: 0, photo: '', photoNote: '' });
   renderPay();
   if (r.cashState === 'pending') startPoll();
 }
@@ -517,7 +544,9 @@ function renderPay() {
   if (r.needPhoto !== false) {
     h += '<span class="lbl">交貨照片 <span class="need">必拍</span>：拍下客人這次拿走的東西（會和產品原始照片一起傳到審核群組）</span>';
     h += '<div class="shot" id="dShot">' + shotInner(PAY.photo, '還沒拍') + '</div>';
-    h += '<label class="pickbtn" for="pickDelivery" data-pick="__delivery" id="dPick">' + (PAY.photo ? '📷 重拍' : '📷 拍交貨照片') + '</label>';
+    h += '<div class="dnote" id="dNote"' + (PAY.photoNote ? '' : ' hidden') + '>' + esc(dNoteText()) + '</div>';
+    h += camBtn('__delivery', PAY.photo ? '📷 重拍' : '📷 拍交貨照片', 'pickbtn', 'dPick');
+    if (IN_APP_CAM) h += albumBtn('__delivery', '相機打不開？改從相簿選（群組會標示「相簿照片」）', 'altpick');
   }
   if (r.needSign) {
     h += '<span class="lbl">經手人（會私訊本人確認）</span><select id="sHandler"><option value="">請選擇</option>' + r.handlers.map(n => '<option>' + esc(n) + '</option>').join('') + '</select>';
@@ -639,7 +668,7 @@ async function submitPay() {
   }
   PAY.busy = true; btn.disabled = true; btn.textContent = '送出中…';   // 按下後立刻停用，避免重複送出
   let res;
-  try { res = await api('collect', { orderId: o.id, method: collect ? method : '', seen: collect, handler: handler, image: image, photo: PAY.photo }); }
+  try { res = await api('collect', { orderId: o.id, method: collect ? method : '', seen: collect, handler: handler, image: image, photo: PAY.photo, photoNote: PAY.photoNote }); }
   catch (e) { res = { ok: false, error: '連線失敗，請再試一次' }; }
   PAY.busy = false;
   if (!res.ok) { btn.disabled = false; btn.textContent = goLabel(); err.textContent = res.error; return; }
@@ -731,6 +760,7 @@ $app.addEventListener('click', async e => {
   const t = e.target.closest('button, #sheetBg');
   if (!t) return;
   const ds = t.dataset;
+  if (ds.cam) return openCamera(ds.cam);
   if (ds.tab) { S.tab = ds.tab; S.sheet = ''; if (ds.tab !== 'shop') load(); return render(); }
   if (ds.cat) { S.cat = ds.cat; return render(); }
   if (ds.inc) { S.cart[ds.inc] = (S.cart[ds.inc] || 0) + 1; buzz(); return render(); }
@@ -782,20 +812,41 @@ $app.addEventListener('input', e => {
 let PICK = '';
 document.addEventListener('click', e => { const l = e.target.closest('[data-pick]'); if (l) PICK = l.dataset.pick; }, true);
 $('zoom').addEventListener('click', () => { $('zoom').hidden = true; });
-$('pickProduct').addEventListener('change', async e => {
+const pad2 = n => String(n).padStart(2, '0');
+// 從相簿選的照片：記下檔案時間，交貨照片推到群組時會標示出來
+function albumNote(f) {
+  const t = f && f.lastModified ? new Date(f.lastModified) : null;
+  return '相簿照片' + (t ? '（檔案時間 ' + (t.getMonth() + 1) + '/' + t.getDate() + ' ' + pad2(t.getHours()) + ':' + pad2(t.getMinutes()) + '）' : '');
+}
+const dNoteText = () => PAY.photoNote ? '⚠️ ' + PAY.photoNote + '：群組會標示不是現場拍的，可以按上面重拍' : '';
+async function onPicked(e, fromCamera) {
   const f = e.target.files && e.target.files[0];
   e.target.value = '';
   if (!f) return;
   const target = PICK;
   let data;
-  try { data = await shrinkImage(f, 1280, 0.82); } catch (x) { return toast(x.message); }
-  if (target === '__new') {   // 新增產品表單
-    S.npPhoto = data;
-    if ($('npShot')) $('npShot').innerHTML = shotInner(data);
-    if ($('npPick')) $('npPick').textContent = '📷 換一張';
+  try { data = await shrinkImage(f, target === '__delivery' ? 1600 : 1280, target === '__delivery' ? 0.8 : 0.82); } catch (x) { return toast(x.message); }
+  usePhoto(target, data, fromCamera ? '' : albumNote(f));
+}
+$('pickFile').addEventListener('change', e => onPicked(e, false));
+// 只有 iPhone 的 Telegram 會照 capture 直接開相機；電腦版還是選檔案，所以要標示
+$('pickCam').addEventListener('change', e => onPicked(e, /^ios/.test(PLATFORM)));
+async function usePhoto(target, data, note) {
+  if (target === '__delivery') {   // 交貨照片
+    if (!PAY.info) return;
+    PAY.photo = data; PAY.photoNote = note || '';
+    if ($('dShot')) $('dShot').innerHTML = shotInner(data);
+    if ($('dPick')) $('dPick').textContent = '📷 重拍';
+    if ($('dNote')) { $('dNote').textContent = dNoteText(); $('dNote').hidden = !PAY.photoNote; }
+    if ($('sErr')) $('sErr').textContent = '';
     return;
   }
-  const p = S.data && S.data.catalog.find(x => x.sku === target);
+  if (target === '__new') {        // 新增產品表單
+    S.npPhoto = data;
+    if ($('npShot')) $('npShot').innerHTML = shotInner(data);
+    return;
+  }
+  const p = S.data && S.data.catalog.find(x => x.sku === target);   // 換產品照片
   if (!p) return;
   p.uploading = true; render();
   let r;
@@ -803,16 +854,45 @@ $('pickProduct').addEventListener('change', async e => {
   p.uploading = false;
   if (r.ok) { p.img = r.img; buzz('medium'); toast('已更新「' + p.name + '」的照片'); } else toast(r.error);
   render();
-});
-$('pickDelivery').addEventListener('change', async e => {
-  const f = e.target.files && e.target.files[0];
-  e.target.value = '';
-  if (!f || !PAY.info) return;
-  try { PAY.photo = await shrinkImage(f, 1600, 0.8); } catch (x) { return toast(x.message); }
-  if ($('dShot')) $('dShot').innerHTML = shotInner(PAY.photo);
-  if ($('dPick')) $('dPick').textContent = '📷 重拍';
-  if ($('sErr')) $('sErr').textContent = '';
-});
+}
+
+// ===== App 內相機（Android）=====
+const CAM = { stream: null, target: '' };
+async function openCamera(target) {
+  CAM.target = target;
+  $('camAlbum').dataset.pick = target;
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return toast('這支手機的 Telegram 不能開相機，請按「相簿」選照片');
+  try {
+    CAM.stream = await navigator.mediaDevices.getUserMedia({ audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } } });
+  } catch (x) {
+    return toast(x && x.name === 'NotAllowedError' ? '請允許 Telegram 使用相機，或改用相簿' : '相機打不開，請改用相簿');
+  }
+  const v = $('camVideo');
+  v.srcObject = CAM.stream;
+  $('camOv').hidden = false;
+  try { await v.play(); } catch (x) {}
+}
+function closeCamera() {
+  if (CAM.stream) CAM.stream.getTracks().forEach(t => t.stop());
+  CAM.stream = null;
+  $('camVideo').srcObject = null;
+  $('camOv').hidden = true;
+}
+function snap() {
+  const v = $('camVideo');
+  if (!v.videoWidth) return toast('相機還沒準備好');
+  const k = Math.min(1, 1600 / Math.max(v.videoWidth, v.videoHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  const target = CAM.target, data = c.toDataURL('image/jpeg', 0.82);
+  closeCamera(); buzz('medium');
+  usePhoto(target, data, '');
+}
+$('camCancel').addEventListener('click', closeCamera);
+$('camShot').addEventListener('click', snap);
+$('camAlbum').addEventListener('click', () => setTimeout(closeCamera, 300));
 
 // ===================== 預覽用假資料：網址加 ?demo 就能在一般瀏覽器看畫面 =====================
 // ?demo（員工）、?demo&as=dl（大葉總務）、?demo&pay=EP261117-004（收款頁）、?demo&price=EP261117-005（價格確認頁）
@@ -881,7 +961,7 @@ function demoApi(action, p) {
   if (action === 'cashRequest') { demoDb.cash = 'pending'; demoDb.polls = 0; return R({ ok: true, cashState: 'pending' }); }
   if (action === 'collect') {
     if (!p.photo) return R({ ok: false, error: '請先拍交貨照片（客人拿走的東西）' });
-    window.__slip = p.image; window.__photo = p.photo; return R({ ok: true, orderId: p.orderId, warnings: [] });
+    window.__slip = p.image; window.__photo = p.photo; window.__photoNote = p.photoNote; return R({ ok: true, orderId: p.orderId, warnings: [] });
   }
   if (action === 'priceInfo') return R({ ok: true, reasons: ['價格不同意', '此商品暫不開放購買', '庫存不足', '其他（請洽管理部）'],
     order: { id: p.orderId, buyer: '廠商辛', identity: '合作廠商', proxyBy: '大葉總務', tier: '廠商價', reason: '老客戶，量多', total: 2600,
