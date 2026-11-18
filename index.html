@@ -34,8 +34,13 @@
   .list { padding: 0 12px; display: grid; gap: 8px; }
   .item { background: var(--card); border-radius: 14px; padding: 10px; display: flex; gap: 10px; align-items: center; }
   .item.out { opacity: .5; }
-  .thumb { width: 60px; height: 60px; border-radius: 10px; background: var(--bg) center/cover no-repeat; flex: none;
-    display: grid; place-items: center; font-size: 24px; }
+  .thumb { position: relative; width: 60px; height: 60px; border-radius: 10px; background: var(--bg); flex: none;
+    display: grid; place-items: center; font-size: 24px; overflow: hidden; padding: 0; }
+  .thumb img, .lthumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .thumbwrap { position: relative; flex: none; }
+  .cam { position: absolute; right: -6px; bottom: -6px; width: 26px; height: 26px; border-radius: 50%; background: var(--card);
+    border: 1px solid var(--line); display: grid; place-items: center; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .thumb .up { position: absolute; inset: 0; background: rgba(0,0,0,.45); color: #fff; font-size: 11px; display: grid; place-items: center; }
   .info-col { flex: 1; min-width: 0; }
   .info-col b { display: block; font-size: 15px; }
   .info-col small { color: var(--hint); font-size: 12.5px; }
@@ -132,11 +137,29 @@
   .pin { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; color: var(--hint); }
   .pin input { margin: 0; width: 120px; flex: none; }
   .psub { margin-left: auto; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .lthumb { position: relative; width: 44px; height: 44px; border-radius: 8px; background: var(--bg); flex: none; overflow: hidden;
+    display: grid; place-items: center; font-size: 18px; padding: 0; }
+  .lrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .lrow .lname { flex: 1; min-width: 0; }
+  .lrow .lamt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pickbtn { display: block; width: 100%; margin-top: 8px; padding: 11px; border-radius: 12px; border: 1.5px dashed var(--accent);
+    color: var(--accent); font-weight: 700; text-align: center; cursor: pointer; }
+  .shot { margin-top: 6px; border-radius: 12px; background: var(--bg); min-height: 64px; display: grid; place-items: center; overflow: hidden; }
+  .shot img { display: block; width: 100%; max-height: 46vh; object-fit: contain; }
+  .sheet .shot img { max-height: 28vh; }
+  .shot .none { color: var(--hint); font-size: 13px; padding: 14px; }
+  .need { color: var(--danger); font-weight: 700; }
+  .vh { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+  .zoom { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.85); display: grid; place-items: center; padding: 16px; }
+  .zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; background: #fff; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <div id="app"><div class="center">載入中…</div></div>
+<input type="file" id="pickProduct" class="vh" accept="image/*">
+<input type="file" id="pickDelivery" class="vh" accept="image/*" capture="environment">
+<div class="zoom" id="zoom" hidden><img alt="產品照片"></div>
 
 <script>
 /* ====== 部署時只要改這一行：貼上 GAS 部署後的 /exec 網址 ====== */
@@ -146,11 +169,42 @@ const tg = window.Telegram && window.Telegram.WebApp;
 const QS = new URLSearchParams(location.search);
 const DEMO = QS.has('demo');
 const S = { data: null, tab: 'shop', cat: '全部', cart: {}, sheet: '', busy: false,
-            proxyOn: false, proxyType: '一般客人', proxyName: '', note: '', reqOn: false, reqPrices: {}, reqReason: '' };
+            proxyOn: false, proxyType: '一般客人', proxyName: '', note: '', reqOn: false, reqPrices: {}, reqReason: '', npPhoto: '' };
 const $app = document.getElementById('app');
 const money = n => '$' + Math.round(n).toLocaleString('en-US');
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = id => document.getElementById(id);
+
+/* ===== 照片 ===== */
+// Drive 縮圖網址失敗時換另一種網址，再失敗就拿掉圖片、露出後面的 📦
+function imgErr(img) {
+  const m = /[?&]id=([\w-]+)/.exec(img.src);
+  if (m && !img.dataset.alt) { img.dataset.alt = '1'; img.src = 'https://lh3.googleusercontent.com/d/' + m[1] + '=w800'; return; }
+  img.remove();
+}
+function imgHtml(url, zoom) {
+  if (!url) return '';
+  return '<img src="' + esc(url) + '" alt="" loading="lazy" onerror="imgErr(this)"' + (zoom ? ' data-zoom="1"' : '') + '>';
+}
+function shotInner(src, empty) { return src ? '<img src="' + esc(src) + '" alt="">' : '<div class="none">' + esc(empty || '還沒拍') + '</div>'; }
+function showZoom(src) { const z = $('zoom'); z.querySelector('img').src = src; z.hidden = false; }
+// 手機照片先縮小再上傳（長邊 maxSide 像素、JPEG）
+function shrinkImage(file, maxSide, quality) {
+  return new Promise((resolve, reject) => {
+    if (file.type && !/^image\//.test(file.type)) return reject(new Error('請選照片檔'));
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('讀不到這張照片，請換一張')); };
+    img.src = url;
+  });
+}
 
 async function api(action, payload) {
   if (DEMO) return demoApi(action, payload || {});
@@ -252,7 +306,8 @@ function shopHtml() {
   h += '<div class="list">' + shown.map(p => {
     const q = S.cart[p.sku] || 0, price = priceOf(p), out = p.avail <= 0 || !(price > 0);
     return '<div class="item' + (out ? ' out' : '') + '">' +
-      '<div class="thumb"' + (p.img ? ' style="background-image:url(\'' + esc(p.img) + '\')"' : '') + '>' + (p.img ? '' : '📦') + '</div>' +
+      '<div class="thumbwrap"><div class="thumb">📦' + imgHtml(p.img, true) + (p.uploading ? '<span class="up">上傳中…</span>' : '') + '</div>' +
+      (d.user.canPhoto ? '<label class="cam" for="pickProduct" data-pick="' + esc(p.sku) + '" title="換產品照片">📷</label>' : '') + '</div>' +
       '<div class="info-col"><b>' + esc(p.name) + (p.isNew ? ' <span class="tag">新產品</span>' : '') + '</b><small>' + esc(p.spec) + (p.spec ? '・' : '') + (p.avail > 0 ? '剩 ' + p.avail + esc(p.unit) : '已售完') + '</small>' +
       '<div class="price">' + (price > 0 ? money(price) + '<small> /' + esc(p.unit) + '</small>' : '未定價') + '</div></div>' +
       '<div class="step">' + (q > 0 ? '<button data-dec="' + esc(p.sku) + '">−</button><span>' + q + '</span>' : '') +
@@ -316,6 +371,8 @@ function newProdSheetHtml() {
   h += fld(tier + '（這次的售價）', 'npPrice', '', true, 'number');
   h += '<details><summary>其他售價（選填）</summary>' + others.map(t => fld(t, 'npOther_' + t, '', false, 'number', ' data-tier="' + t + '"')).join('') + '</details>';
   h += fld('這次要賣的數量', 'npQty', '', true, 'number', ' value="1"');
+  h += '<span class="lbl">產品照片（選填，之後也可以在產品上按 📷 補）</span><div class="shot" id="npShot">' + shotInner(S.npPhoto, '還沒有照片') + '</div>';
+  h += '<label class="pickbtn" for="pickProduct" data-pick="__new" id="npPick">' + (S.npPhoto ? '📷 換一張' : '📷 拍照或選照片') + '</label>';
   h += '<div class="err" id="npErr"></div>';
   h += '<div class="actions"><button class="sec" id="closeSheet">取消</button><button class="cta" id="createProd">建立並加入購物車</button></div></div></div>';
   return h;
@@ -379,7 +436,7 @@ async function createProduct() {
   const tier = tierName();
   const prices = {}; prices[tier] = v('npPrice');
   document.querySelectorAll('[data-tier]').forEach(i => { if (i.value) prices[i.dataset.tier] = i.value; });
-  const product = { name: v('npName'), spec: v('npSpec'), unit: v('npUnit') || '個', cat: v('npCat'), qty: v('npQty'), prices: prices };
+  const product = { name: v('npName'), spec: v('npSpec'), unit: v('npUnit') || '個', cat: v('npCat'), qty: v('npQty'), prices: prices, photo: S.npPhoto || '' };
   if (!product.name) return void (err.textContent = '請填品名');
   if (!(Number(prices[tier]) > 0)) return void (err.textContent = '請填這次的售價');
   if (!(Number(product.qty) >= 1)) return void (err.textContent = '這次要賣的數量至少 1');
@@ -389,14 +446,14 @@ async function createProduct() {
   if (!r.ok) { btn.disabled = false; btn.textContent = '建立並加入購物車'; err.textContent = r.error; return; }
   S.data.catalog.push(r.product);
   S.cart[r.product.sku] = Math.min(Number(product.qty), r.product.avail);
-  S.sheet = ''; S.cat = '全部';
-  buzz('medium'); toast('已新增 ' + r.product.name + '（' + r.product.sku + '），已放進購物車');
+  S.sheet = ''; S.cat = '全部'; S.npPhoto = '';
+  buzz('medium'); toast(r.warning || ('已新增 ' + r.product.name + '（' + r.product.sku + '），已放進購物車'));
   render();
 }
 
 // ===================== 現場收款／簽收頁（大葉總務）=====================
 
-const PAY = { info: null, method: '', inked: false, busy: false, timer: null, polls: 0 };
+const PAY = { info: null, method: '', inked: false, busy: false, timer: null, polls: 0, photo: '' };
 function stopPoll() { if (PAY.timer) { clearInterval(PAY.timer); PAY.timer = null; } }
 
 async function openPay(id) {
@@ -405,7 +462,7 @@ async function openPay(id) {
   let r;
   try { r = await api('payInfo', { orderId: id }); } catch (e) { r = { ok: false, error: '連線失敗，請稍後再試' }; }
   if (!r.ok) return center('無法開啟收款頁', esc(r.error), ['payBack', '回到員購']);
-  Object.assign(PAY, { info: r, method: '', inked: false, busy: false, polls: 0 });
+  Object.assign(PAY, { info: r, method: '', inked: false, busy: false, polls: 0, photo: '' });
   renderPay();
   if (r.cashState === 'pending') startPoll();
 }
@@ -429,7 +486,7 @@ function payBoxHtml() {
   }
   const src = r.qr[m];
   return '<div class="paybox">' + (src ? '<img class="qr" src="' + src + '" alt="' + esc(m) + ' 收款 QR">' :
-    '<div class="hint2">還沒有設定' + esc(m) + '收款 QR（私訊 bot 傳 QR 圖，說明文字打 /qr）</div>') +
+    '<div class="hint2">還沒有設定' + esc(m) + '收款 QR，請管理者私訊 bot 設定</div>') +
     '<div class="bigamt">應付 ' + amount() + '</div><div class="hint2">客人掃碼後要自己輸入金額</div></div>';
 }
 function seenText() {
@@ -446,7 +503,8 @@ function renderPay() {
   let h = '<div class="signwrap"><div class="slip">';
   h += '<h2>' + (collect ? '現場收款' : r.needSign ? '簽收交貨' : '交貨') + '</h2>';
   h += '<div class="sub">' + esc(o.id) + '　' + esc(o.identity) + '：' + esc(o.buyer) + '</div>';
-  h += o.lines.map(l => '<div class="row"><span>' + esc(l.name) + (l.spec ? ' ' + esc(l.spec) : '') + ' × ' + l.qty + esc(l.unit) + '</span><span>' + money(l.sub) + '</span></div>').join('');
+  h += o.lines.map(l => '<div class="lrow"><div class="lthumb">📦' + imgHtml(l.img, true) + '</div><span class="lname">' + esc(l.name) + (l.spec ? ' ' + esc(l.spec) : '') +
+    ' × ' + l.qty + esc(l.unit) + '</span><span class="lamt">' + money(l.sub) + '</span></div>').join('');
   h += '<div class="total"><span>' + (collect ? '應收' : '合計') + '</span><span class="amt">' + amount() + '</span></div>';
   if (collect) {
     if (o.paidReport) h += '<div class="info">買方回報已付款（' + esc(o.pay) + '），還沒傳截圖；在現場看過付款成功畫面，也可以在這裡直接收款。</div>';
@@ -455,6 +513,11 @@ function renderPay() {
     h += '<label class="chk" id="seenWrap"' + (PAY.method ? '' : ' hidden') + '><input type="checkbox" id="seen"><span id="seenText">' + esc(seenText()) + '</span></label>';
   } else {
     h += '<div class="okline">✅ 已確認收款：' + esc(o.pay) + '（' + esc(o.confirmBy) + '）</div>';
+  }
+  if (r.needPhoto !== false) {
+    h += '<span class="lbl">交貨照片 <span class="need">必拍</span>：拍下客人這次拿走的東西（會和產品原始照片一起傳到審核群組）</span>';
+    h += '<div class="shot" id="dShot">' + shotInner(PAY.photo, '還沒拍') + '</div>';
+    h += '<label class="pickbtn" for="pickDelivery" data-pick="__delivery" id="dPick">' + (PAY.photo ? '📷 重拍' : '📷 拍交貨照片') + '</label>';
   }
   if (r.needSign) {
     h += '<span class="lbl">經手人（會私訊本人確認）</span><select id="sHandler"><option value="">請選擇</option>' + r.handlers.map(n => '<option>' + esc(n) + '</option>').join('') + '</select>';
@@ -566,6 +629,7 @@ async function submitPay() {
   const method = collect ? PAY.method : o.pay;
   if (collect && !method) return void (err.textContent = '請選擇收款方式');
   if (collect && !$('seen').checked) return void (err.textContent = method === '現金' ? '請勾選「已收到現金」' : '請勾選「已看到付款成功畫面」');
+  if (r.needPhoto !== false && !PAY.photo) return void (err.textContent = '請先拍交貨照片（客人拿走的東西）');
   let handler = '', image = '';
   if (r.needSign) {
     handler = $('sHandler').value;
@@ -575,7 +639,7 @@ async function submitPay() {
   }
   PAY.busy = true; btn.disabled = true; btn.textContent = '送出中…';   // 按下後立刻停用，避免重複送出
   let res;
-  try { res = await api('collect', { orderId: o.id, method: collect ? method : '', seen: collect, handler: handler, image: image }); }
+  try { res = await api('collect', { orderId: o.id, method: collect ? method : '', seen: collect, handler: handler, image: image, photo: PAY.photo }); }
   catch (e) { res = { ok: false, error: '連線失敗，請再試一次' }; }
   PAY.busy = false;
   if (!res.ok) { btn.disabled = false; btn.textContent = goLabel(); err.textContent = res.error; return; }
@@ -584,6 +648,7 @@ async function submitPay() {
   center(r.needSign ? '已簽收並交貨' : '已交貨',
     '訂單 ' + esc(o.id) + '　' + esc(method) + ' ' + amount() +
     (r.needSign ? '<br>簽單已送給管理者和主管，經手人 ' + esc(handler) + ' 會收到確認訊息。' : '') +
+    (warn.some(w => w.indexOf('交貨照片') !== -1) ? '' : '<br>交貨照片已和產品原始照片一起傳到審核群組。') +
     (method === '現金' ? '<br>請把現金交給管理者。' : '') +
     (warn.length ? '<br><span class="warn">' + warn.map(esc).join('<br>') + '</span>' : ''),
     ['payBack', '回到員購']);
@@ -661,6 +726,8 @@ async function rejectPrice() {
 // ===================== 事件 =====================
 
 $app.addEventListener('click', async e => {
+  const zi = e.target.closest('img[data-zoom]');
+  if (zi) return showZoom(zi.currentSrc || zi.src);
   const t = e.target.closest('button, #sheetBg');
   if (!t) return;
   const ds = t.dataset;
@@ -672,7 +739,7 @@ $app.addEventListener('click', async e => {
     if (S.proxyOn && !S.proxyName.trim()) return toast('請先填寫代客下單的對象');
     S.sheet = 'cart'; return render();
   }
-  if (t.id === 'openNew') { S.sheet = 'newprod'; return render(); }
+  if (t.id === 'openNew') { S.sheet = 'newprod'; S.npPhoto = ''; return render(); }
   if (t.id === 'closeSheet' || (t.id === 'sheetBg' && e.target === t)) { S.sheet = ''; return render(); }
   if (t.id === 'submit') return submit();
   if (t.id === 'createProd') return createProduct();
@@ -711,15 +778,52 @@ $app.addEventListener('input', e => {
   }
 });
 
+// ===== 拍照／選照片：按到哪一個 📷 就記下要給誰用 =====
+let PICK = '';
+document.addEventListener('click', e => { const l = e.target.closest('[data-pick]'); if (l) PICK = l.dataset.pick; }, true);
+$('zoom').addEventListener('click', () => { $('zoom').hidden = true; });
+$('pickProduct').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  const target = PICK;
+  let data;
+  try { data = await shrinkImage(f, 1280, 0.82); } catch (x) { return toast(x.message); }
+  if (target === '__new') {   // 新增產品表單
+    S.npPhoto = data;
+    if ($('npShot')) $('npShot').innerHTML = shotInner(data);
+    if ($('npPick')) $('npPick').textContent = '📷 換一張';
+    return;
+  }
+  const p = S.data && S.data.catalog.find(x => x.sku === target);
+  if (!p) return;
+  p.uploading = true; render();
+  let r;
+  try { r = await api('productPhoto', { sku: target, photo: data }); } catch (x) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  p.uploading = false;
+  if (r.ok) { p.img = r.img; buzz('medium'); toast('已更新「' + p.name + '」的照片'); } else toast(r.error);
+  render();
+});
+$('pickDelivery').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!f || !PAY.info) return;
+  try { PAY.photo = await shrinkImage(f, 1600, 0.8); } catch (x) { return toast(x.message); }
+  if ($('dShot')) $('dShot').innerHTML = shotInner(PAY.photo);
+  if ($('dPick')) $('dPick').textContent = '📷 重拍';
+  if ($('sErr')) $('sErr').textContent = '';
+});
+
 // ===================== 預覽用假資料：網址加 ?demo 就能在一般瀏覽器看畫面 =====================
 // ?demo（員工）、?demo&as=dl（大葉總務）、?demo&pay=EP261117-004（收款頁）、?demo&price=EP261117-005（價格確認頁）
 const DEMO_QR = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/><path fill-rule="evenodd" d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2z"/><path d="M9 0h1v1H9zM11 0h1v1h-1zM12 1h1v1h-1zM8 2h1v1H8zM10 2h1v1h-1zM9 3h1v1H9zM12 3h1v1h-1zM8 4h1v1H8zM11 4h1v1h-1zM10 5h1v1h-1zM9 6h1v1H9zM12 6h1v1h-1zM0 9h1v1H0zM2 8h1v1H2zM4 9h1v1H4zM6 10h1v1H6zM1 11h1v1H1zM3 12h1v1H3zM5 11h1v1H5zM8 8h1v1H8zM10 9h1v1h-1zM12 8h1v1h-1zM9 10h1v1H9zM11 11h1v1h-1zM13 9h1v1h-1zM15 8h1v1h-1zM17 9h1v1h-1zM19 8h1v1h-1zM20 10h1v1h-1zM16 11h1v1h-1zM18 12h1v1h-1zM14 12h1v1h-1zM8 13h1v1H8zM10 14h1v1h-1zM12 15h1v1h-1zM9 16h1v1H9zM11 17h1v1h-1zM13 18h1v1h-1zM8 19h1v1H8zM10 20h1v1h-1zM12 19h1v1h-1zM15 14h1v1h-1zM17 15h1v1h-1zM19 14h1v1h-1zM16 16h1v1h-1zM18 17h1v1h-1zM20 16h1v1h-1zM14 18h1v1h-1zM16 19h1v1h-1zM18 20h1v1h-1zM20 19h1v1h-1zM15 20h1v1h-1z"/></svg>');
 const AS_DL = QS.get('as') === 'dl';
+const demoPic = (emoji, bg) => 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="' + bg + '"/><text x="60" y="80" font-size="60" text-anchor="middle">' + emoji + '</text></svg>');
 const demoDb = {
   catalog: [
-    { sku: 'G-101', cat: '剪定工具', name: '修枝剪 8 吋', spec: 'SK5 刀刃', unit: '支', img: '', avail: 12, isNew: false, prices: { '員工價': 280, '廠商價': 330, '一般價': 420 } },
-    { sku: 'G-102', cat: '剪定工具', name: '高枝剪', spec: '伸縮 2–3 m', unit: '支', img: '', avail: 3, isNew: false, prices: { '員工價': 950, '廠商價': 1100, '一般價': 1380 } },
-    { sku: 'G-201', cat: '手工具', name: '園藝鏟三件組', spec: '不鏽鋼', unit: '組', img: '', avail: 20, isNew: false, prices: { '員工價': 360, '廠商價': 420, '一般價': 520 } },
+    { sku: 'G-101', cat: '剪定工具', name: '修枝剪 8 吋', spec: 'SK5 刀刃', unit: '支', img: demoPic('✂️', '#e3f1e7'), avail: 12, isNew: false, prices: { '員工價': 280, '廠商價': 330, '一般價': 420 } },
+    { sku: 'G-102', cat: '剪定工具', name: '高枝剪', spec: '伸縮 2–3 m', unit: '支', img: demoPic('🌳', '#e6eef8'), avail: 3, isNew: false, prices: { '員工價': 950, '廠商價': 1100, '一般價': 1380 } },
+    { sku: 'G-201', cat: '手工具', name: '園藝鏟三件組', spec: '不鏽鋼', unit: '組', img: demoPic('🪴', '#f5eee2'), avail: 20, isNew: false, prices: { '員工價': 360, '廠商價': 420, '一般價': 520 } },
     { sku: 'G-202', cat: '手工具', name: '除草鐮刀', spec: '', unit: '支', img: '', avail: 0, isNew: false, prices: { '員工價': 150, '廠商價': 180, '一般價': 220 } },
     { sku: 'G-301', cat: '澆灌', name: '伸縮水管 15 m', spec: '附七段噴頭', unit: '條', img: '', avail: 6, isNew: false, prices: { '員工價': 490, '廠商價': 560, '一般價': 690 } }
   ],
@@ -737,7 +841,7 @@ function demoApi(action, p) {
   const tier = AS_DL ? '一般價' : '員工價';
   const R = x => Promise.resolve(x);
   if (action === 'init') return R({ ok: true, registered: true,
-    user: AS_DL ? { name: '大葉總務', identity: '總務帳號', dept: '', canProxy: true, proxyOnly: true, canCreate: true } : { name: '示範員工', identity: '在職', dept: '辦公室', canProxy: false },
+    user: AS_DL ? { name: '大葉總務', identity: '總務帳號', dept: '', canProxy: true, proxyOnly: true, canCreate: true, canPhoto: true } : { name: '示範員工', identity: '在職', dept: '辦公室', canProxy: false, canPhoto: false },
     vendors: ['廠商辛'], catalog: demoDb.catalog.map(c => Object.assign({}, c, { price: c.prices['員工價'] }, AS_DL ? {} : { prices: undefined })),
     orders: demoDb.orders, todo: AS_DL ? demoDb.todo : [] });
   if (action === 'submit') {
@@ -751,20 +855,34 @@ function demoApi(action, p) {
   if (action === 'newProduct') {
     const sku = 'NEW-00' + (demoDb.catalog.filter(c => c.isNew).length + 1);
     const prices = { '員工價': 0, '廠商價': 0, '一般價': 0 }; Object.keys(p.product.prices).forEach(k => { prices[k] = Number(p.product.prices[k]) || 0; });
-    const item = { sku: sku, cat: p.product.cat || '新增產品', name: p.product.name, spec: p.product.spec, unit: p.product.unit, img: '', avail: Number(p.product.qty), isNew: true, prices: prices, price: prices['員工價'] };
+    const item = { sku: sku, cat: p.product.cat || '新增產品', name: p.product.name, spec: p.product.spec, unit: p.product.unit, img: p.product.photo || '', avail: Number(p.product.qty), isNew: true, prices: prices, price: prices['員工價'] };
     demoDb.catalog.push(item);
     return R({ ok: true, product: item });
   }
+  if (action === 'productPhoto') {
+    const c = demoDb.catalog.find(x => x.sku === p.sku);
+    if (c) c.img = p.photo;
+    return R({ ok: true, sku: p.sku, img: p.photo });
+  }
+  if (action === 'payInfo' && p.orderId === 'EP261117-003') {   // 遠端付款查帳後，員工的單只要拍照交貨
+    return R({ ok: true, mode: 'deliver', needSign: false, needPhoto: true, cashState: 'none', deliverer: '大葉總務', handlers: [], methods: [], qr: {},
+      bank: { info: '', account: '' },
+      order: { id: p.orderId, buyer: '員工丁', identity: '在職', total: 950, pay: '轉帳', paidReport: true, confirmBy: 'Mandy（查帳）',
+        lines: [{ sku: 'G-102', name: '高枝剪', spec: '伸縮 2–3 m', qty: 1, unit: '支', price: 950, sub: 950, img: demoDb.catalog[1].img }] } });
+  }
   if (action === 'payInfo') {
     if (p.light) { if (demoDb.cash === 'pending' && ++demoDb.polls >= 2) demoDb.cash = 'allowed'; return R({ ok: true, mode: 'collect', needSign: true, cashState: demoDb.cash }); }
-    return R({ ok: true, mode: 'collect', needSign: true, cashState: demoDb.cash, deliverer: '大葉總務', handlers: ['主管甲', '主管乙'],
+    return R({ ok: true, mode: 'collect', needSign: true, needPhoto: true, cashState: demoDb.cash, deliverer: '大葉總務', handlers: ['主管甲', '主管乙'],
       methods: ['轉帳', '全支付', '台灣Pay'].concat(demoDb.cash === 'allowed' ? ['現金'] : []), qr: { '全支付': DEMO_QR, '台灣Pay': DEMO_QR },
       bank: { info: '國泰世華 013　大葉股份有限公司', account: '1234-5678-9012' },
       order: { id: p.orderId, buyer: '王先生', identity: '一般客人', total: 1530, pay: '', paidReport: false, confirmBy: '',
-        lines: [{ name: '修枝剪 8 吋', spec: 'SK5 刀刃', qty: 2, unit: '支', price: 420, sub: 840 }, { name: '伸縮水管 15 m', spec: '', qty: 1, unit: '條', price: 690, sub: 690 }] } });
+        lines: [{ sku: 'G-101', name: '修枝剪 8 吋', spec: 'SK5 刀刃', qty: 2, unit: '支', price: 420, sub: 840, img: demoDb.catalog[0].img }, { sku: 'G-301', name: '伸縮水管 15 m', spec: '', qty: 1, unit: '條', price: 690, sub: 690, img: '' }] } });
   }
   if (action === 'cashRequest') { demoDb.cash = 'pending'; demoDb.polls = 0; return R({ ok: true, cashState: 'pending' }); }
-  if (action === 'collect') { window.__slip = p.image; return R({ ok: true, orderId: p.orderId, warnings: [] }); }
+  if (action === 'collect') {
+    if (!p.photo) return R({ ok: false, error: '請先拍交貨照片（客人拿走的東西）' });
+    window.__slip = p.image; window.__photo = p.photo; return R({ ok: true, orderId: p.orderId, warnings: [] });
+  }
   if (action === 'priceInfo') return R({ ok: true, reasons: ['價格不同意', '此商品暫不開放購買', '庫存不足', '其他（請洽管理部）'],
     order: { id: p.orderId, buyer: '廠商辛', identity: '合作廠商', proxyBy: '大葉總務', tier: '廠商價', reason: '老客戶，量多', total: 2600,
       lines: [{ sku: 'NEW-001', name: '不鏽鋼水桶', spec: '10L', unit: '個', qty: 4, price: 300, orig: 300, req: 0, isNew: true },
