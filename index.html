@@ -44,6 +44,13 @@
   .info-col { flex: 1; min-width: 0; }
   .info-col b { display: block; font-size: 15px; }
   .info-col small { color: var(--hint); font-size: 12.5px; }
+  .info-col small.lim { display: block; margin-top: 1px; }
+  .info-col small.lim.over { color: #b7791f; font-weight: 600; }
+  .reqline.overline { color: #b7791f; font-weight: 600; }
+  .extrabox { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(183, 121, 31, .1); }
+  .extrabox b { display: block; color: #8a5a12; }
+  .extrabox span { display: block; font-size: 13px; color: var(--hint); margin: 2px 0 6px; }
+  .extrabox textarea { margin-top: 0; }
   .price { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
   .step { display: flex; align-items: center; gap: 2px; flex: none; }
   .step button { width: 34px; height: 34px; border-radius: 10px; background: var(--bg); font-size: 20px; line-height: 1; }
@@ -191,7 +198,7 @@ let PHOTO = { max: 1280, q: 0.75 };
 function setPhotoCfg(c) { if (c && c.max > 0 && c.q > 0) PHOTO = { max: c.max, q: c.q }; }
 const DEMO = QS.has('demo');
 const S = { data: null, tab: 'shop', cat: '全部', cart: {}, sheet: '', busy: false,
-            proxyOn: false, proxyType: '一般客人', proxyName: '', note: '', reqOn: false, reqPrices: {}, reqReason: '', npPhoto: '' };
+            proxyOn: false, proxyType: '一般客人', proxyName: '', note: '', reqOn: false, reqPrices: {}, reqReason: '', npPhoto: '', extraReason: '' };
 const $app = document.getElementById('app');
 const money = n => '$' + Math.round(n).toLocaleString('en-US');
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -279,6 +286,16 @@ function wantOf(l) {
   return n > 0 && n !== l.price ? n : null;
 }
 function needsPriceCheck() { return cartLines().some(l => l.p.isNew || wantOf(l)); }
+// 限購：員工、外加工每人每年最多買 limit 個（今年已買 bought 個）；超過要申請加購。代客下單不限
+function leftOf(p) { return p.limit > 0 && !S.proxyOn ? Math.max(0, p.limit - (p.bought || 0)) : Infinity; }
+function overOf(l) { return Math.max(0, l.qty - leftOf(l.p)); }
+function extraLines() { return cartLines().filter(l => overOf(l) > 0); }
+function limitHtml(p, q) {
+  if (!(p.limit > 0) || S.proxyOn) return '';
+  const left = leftOf(p), over = q - left;
+  return '<small class="lim' + (over > 0 || left === 0 ? ' over' : '') + '">每年限購 ' + p.limit + esc(p.unit) + '・' +
+    (over > 0 ? '超過 ' + over + esc(p.unit) + '，要申請加購' : left > 0 ? '今年還可買 ' + left + esc(p.unit) : '今年已買滿，可申請加購') + '</small>';
+}
 
 async function load() {
   stopPoll();
@@ -338,7 +355,7 @@ function shopHtml() {
     return '<div class="item' + (out ? ' out' : '') + '">' +
       '<div class="thumbwrap"><div class="thumb">📦' + imgHtml(p.img, true) + (p.uploading ? '<span class="up">上傳中…</span>' : '') + '</div>' +
       (d.user.canPhoto ? camBtn(p.sku, '📷', 'cam') : '') + '</div>' +
-      '<div class="info-col"><b>' + esc(p.name) + (p.isNew ? ' <span class="tag">新產品</span>' : '') + '</b><small>' + esc(p.spec) + (p.spec ? '・' : '') + (p.avail > 0 ? '剩 ' + p.avail + esc(p.unit) : '已售完') + '</small>' +
+      '<div class="info-col"><b>' + esc(p.name) + (p.isNew ? ' <span class="tag">新產品</span>' : '') + '</b><small>' + esc(p.spec) + (p.spec ? '・' : '') + (p.avail > 0 ? '剩 ' + p.avail + esc(p.unit) : '已售完') + '</small>' + limitHtml(p, q) +
       '<div class="price">' + (price > 0 ? money(price) + '<small> /' + esc(p.unit) + '</small>' : '未定價') + '</div></div>' +
       '<div class="step">' + (q > 0 ? '<button data-dec="' + esc(p.sku) + '">−</button><span>' + q + '</span>' : '') +
       '<button class="add" data-inc="' + esc(p.sku) + '"' + (out || q >= p.avail ? ' disabled' : '') + '>+</button></div></div>';
@@ -350,11 +367,13 @@ function shopHtml() {
 }
 
 function cartInfoText() {
+  if (extraLines().length) return '超過限購數量，送出後要先由管理者確認加購' + (needsPriceCheck() ? '和價格' : '') + '，確認後才能付款。';
   if (needsPriceCheck()) return '含新產品或申請改價，送出後要先確認價格，確認後才能付款。';
   return S.proxyOn ? '送出後直接開現場收款頁收款，客人簽名後交貨。' : '送出後就可以付款（轉帳、全支付、台灣Pay），確認收款後交貨。';
 }
 function submitLabel() {
   if (S.busy) return '送出中…';
+  if (extraLines().length) return '送出加購申請';
   return needsPriceCheck() ? '送出，等價格確認' : S.proxyOn ? '送出並收款' : '送出訂單';
 }
 function reqTotalText() {
@@ -371,6 +390,9 @@ function cartSheetHtml() {
   if (S.proxyOn) h += '<div class="row"><span>代客下單</span><span>' + esc(S.proxyType) + '：' + esc(S.proxyName || '（未填）') + '</span></div>';
   cartLines().forEach(l => {
     h += '<div class="row"><span>' + esc(l.p.name) + (l.p.isNew ? ' <span class="tag">新產品</span>' : '') + ' × ' + l.qty + '</span><span>' + money(l.sub) + '</span></div>';
+    if (overOf(l) > 0) {
+      h += '<div class="reqline overline">超過限購：每年限購 ' + l.p.limit + '，今年已買 ' + (l.p.bought || 0) + '，這次 ' + l.qty + esc(l.p.unit) + '</div>';
+    }
     if (S.reqOn) {
       h += '<div class="reqline"><span>希望單價（原價 ' + money(l.price) + '）</span><input type="number" inputmode="numeric" min="1" data-req="' + esc(l.p.sku) + '" value="' +
         esc(S.reqPrices[l.p.sku] === undefined ? '' : S.reqPrices[l.p.sku]) + '" placeholder="' + l.price + '"></div>';
@@ -380,6 +402,10 @@ function cartSheetHtml() {
   if (S.reqOn) h += '<div class="reqsum" id="reqTotal">' + esc(reqTotalText()) + '</div>';
   h += '<label class="chk"><input type="checkbox" id="reqOn"' + (S.reqOn ? ' checked' : '') + '><span>申請改價（要寫原因，確認價格後才能付款）</span></label>';
   if (S.reqOn) h += '<textarea id="reqReason" maxlength="200" placeholder="改價原因（必填），例如：外箱瑕疵、量多">' + esc(S.reqReason) + '</textarea>';
+  if (extraLines().length) {
+    h += '<div class="extrabox"><b>📦 申請加購</b><span>超過今年的限購數量，要寫原因，管理者同意後才能付款。</span>' +
+      '<textarea id="extraReason" maxlength="200" placeholder="加購原因（必填），例如：幫家人買、工作要用">' + esc(S.extraReason) + '</textarea></div>';
+  }
   h += '<div class="info" id="cartInfo">' + esc(cartInfoText()) + '</div>';
   h += '<textarea id="note" maxlength="200" placeholder="備註（選填）">' + esc(S.note) + '</textarea>';
   h += '<div class="actions"><button class="sec" id="closeSheet">再看看</button><button class="cta" id="submit"' + (S.busy ? ' disabled' : '') + '>' + esc(submitLabel()) + '</button></div></div></div>';
@@ -413,7 +439,7 @@ function orderCardHtml(o, showBuyer) {
   return '<div class="order"><div class="top"><b>' + esc(o.id) + '</b><span class="badge s-' + esc(o.status) + '">' + esc(o.status) + '</span></div>' +
     (showBuyer ? '<div class="who">' + esc(o.identity) + '：' + esc(o.buyer) + '</div>' : '') +
     '<ul>' + o.lines.map(l => '<li>' + esc(l.name) + ' × ' + l.qty + esc(l.unit) + '</li>').join('') + '</ul>' +
-    (o.reason ? '<div class="note-bad">價格確認未通過：' + esc(o.reason) + '</div>' : '') +
+    (o.reason ? '<div class="note-bad">沒有通過確認：' + esc(o.reason) + '</div>' : '') +
     (o.hint ? '<div class="note-ok">' + esc(o.hint) + '</div>' : '') +
     '<div class="foot"><span>' + esc(o.time) + '　<b>' + money(o.total) + '</b>' + (o.pay ? '・' + esc(o.pay) : '') + '</span><span class="btns">' +
     (o.canCancel && S.tab === 'orders' ? '<button class="ghost" data-cancel="' + esc(o.id) + '">取消</button>' : '') +
@@ -443,20 +469,25 @@ async function submit() {
       priceReq = { reason: S.reqReason.trim(), prices: prices };
     }
   }
+  let extra = null;
+  if (extraLines().length) {
+    if (!S.extraReason.trim()) return toast('超過限購，請填寫加購原因');
+    extra = { reason: S.extraReason.trim() };
+  }
   S.busy = true; render();   // 按下後立刻停用按鈕，避免重複送出
   let r;
   try {
     r = await api('submit', {
-      items: lines.map(l => ({ sku: l.p.sku, qty: l.qty })), note: S.note, priceReq: priceReq,
+      items: lines.map(l => ({ sku: l.p.sku, qty: l.qty })), note: S.note, priceReq: priceReq, extra: extra,
       proxy: S.proxyOn ? { type: S.proxyType, name: S.proxyName.trim() } : null
     });
   } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
   S.busy = false;
-  if (!r.ok) { S.sheet = ''; toast(r.error); return r.refresh ? load() : render(); }
-  S.cart = {}; S.note = ''; S.sheet = ''; S.proxyName = ''; S.reqOn = false; S.reqPrices = {}; S.reqReason = '';
+  if (!r.ok) { S.sheet = ''; toast(r.error); return r.refresh || r.overLimit ? load() : render(); }   // 超過限購：重新讀今年已買
+  S.cart = {}; S.note = ''; S.sheet = ''; S.proxyName = ''; S.reqOn = false; S.reqPrices = {}; S.reqReason = ''; S.extraReason = '';
   buzz('medium');
   if (r.next === 'collect') { toast('訂單 ' + r.orderId + ' 已成立，請收款'); return openPay(r.orderId); }
-  toast(r.next === 'price' ? '訂單 ' + r.orderId + ' 已送出，等價格確認' : '訂單 ' + r.orderId + ' 已成立，請到 bot 聊天室付款');
+  toast(r.next === 'price' ? '訂單 ' + r.orderId + ' 已送出，等' + (r.extra ? '加購' : '價格') + '確認' : '訂單 ' + r.orderId + ' 已成立，請到 bot 聊天室付款');
   S.tab = 'orders';
   load();
 }
@@ -708,9 +739,14 @@ function priceTotal() {
 }
 function renderPrice() {
   const r = PRICE.info, o = r.order;
-  let h = '<div class="signwrap"><div class="slip"><h2>價格確認</h2>';
+  const title = o.extra ? (o.lines.some(l => l.req || l.isNew) ? '價格確認＋申請加購' : '申請加購') : '價格確認';
+  let h = '<div class="signwrap"><div class="slip"><h2>' + title + '</h2>';
   h += '<div class="sub">' + esc(o.id) + '　' + esc(o.identity) + '：' + esc(o.buyer) + (o.proxyBy ? '　代客下單：' + esc(o.proxyBy) : '') + '</div>';
   if (o.reason) h += '<div class="okline" style="background:rgba(183,121,31,.12);color:#8a5a12">改價原因：' + esc(o.reason) + '</div>';
+  if (o.extra) {
+    h += '<div class="okline" style="background:rgba(183,121,31,.12);color:#8a5a12">📦 超過限購，申請加購<br>' + esc(o.extra).replace(/；/g, '<br>') +
+      (o.extraReason ? '<br>加購原因：' + esc(o.extraReason) : '') + '<br><small>確認就是同意加購；不同意請在下面選「駁回」→「不同意加購」</small></div>';
+  }
   h += o.lines.map((l, i) => {
     const start = l.req || l.price;
     return '<div class="pline"><div class="pname">' + (l.isNew ? '<span class="tag">新產品</span> ' : '') + esc(l.name) + (l.spec ? ' ' + esc(l.spec) : '') + ' × ' + l.qty + esc(l.unit) + '</div>' +
@@ -720,7 +756,7 @@ function renderPrice() {
   h += '<div class="total"><span>合計（' + esc(o.tier) + '）</span><span class="amt" id="pTotal">' + money(o.lines.reduce((s, l) => s + (l.req || l.price) * l.qty, 0)) + '</span></div>';
   if (o.lines.some(l => l.isNew)) h += '<div class="info">新產品確認後的價格會寫回產品資料，之後就是固定價。</div>';
   if (o.lines.some(l => l.req)) h += '<div class="info">申請改價只改這一張單，不會改產品資料。</div>';
-  h += '<div class="err" id="pErr"></div><div class="actions"><button class="cta" id="prConfirm">確認價格</button></div>';
+  h += '<div class="err" id="pErr"></div><div class="actions"><button class="cta" id="prConfirm">' + (o.extra ? '同意加購並確認價格' : '確認價格') + '</button></div>';
   h += '<details><summary>駁回這張訂單</summary><select id="prReason">' + r.reasons.map(x => '<option>' + esc(x) + '</option>').join('') +
     '</select><div class="actions"><button class="danger" id="prReject">駁回</button></div></details>';
   h += '</div></div>';
@@ -742,7 +778,7 @@ async function confirmPrice() {
   PRICE.busy = false;
   if (!r.ok) { $('prConfirm').disabled = false; $('prConfirm').textContent = '確認價格'; $('pErr').textContent = r.error; return; }
   buzz('medium');
-  center('價格已確認', '訂單 ' + esc(o.id) + '　合計 ' + money(r.total) + '<br>已通知' + (o.proxyBy ? '大葉總務收款' : '買方付款') + '。', ['prClose', '關閉']);
+  center(o.extra ? '已同意加購' : '價格已確認', '訂單 ' + esc(o.id) + '　合計 ' + money(r.total) + '<br>已通知' + (o.proxyBy ? '大葉總務收款' : '買方付款') + '。', ['prClose', '關閉']);
 }
 
 async function rejectPrice() {
@@ -805,6 +841,7 @@ $app.addEventListener('input', e => {
   if (t.id === 'proxyName') S.proxyName = t.value;
   if (t.id === 'note') S.note = t.value;
   if (t.id === 'reqReason') S.reqReason = t.value;
+  if (t.id === 'extraReason') S.extraReason = t.value;
   if (t.dataset.req !== undefined) { S.reqPrices[t.dataset.req] = t.value; updateCartMeta(); }
   if (t.dataset.pi !== undefined) {
     const l = PRICE.info.order.lines[Number(t.dataset.pi)];
@@ -904,6 +941,7 @@ $('camAlbum').addEventListener('click', () => setTimeout(closeCamera, 300));
 const DEMO_QR = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/><path fill-rule="evenodd" d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2z"/><path d="M9 0h1v1H9zM11 0h1v1h-1zM12 1h1v1h-1zM8 2h1v1H8zM10 2h1v1h-1zM9 3h1v1H9zM12 3h1v1h-1zM8 4h1v1H8zM11 4h1v1h-1zM10 5h1v1h-1zM9 6h1v1H9zM12 6h1v1h-1zM0 9h1v1H0zM2 8h1v1H2zM4 9h1v1H4zM6 10h1v1H6zM1 11h1v1H1zM3 12h1v1H3zM5 11h1v1H5zM8 8h1v1H8zM10 9h1v1h-1zM12 8h1v1h-1zM9 10h1v1H9zM11 11h1v1h-1zM13 9h1v1h-1zM15 8h1v1h-1zM17 9h1v1h-1zM19 8h1v1h-1zM20 10h1v1h-1zM16 11h1v1h-1zM18 12h1v1h-1zM14 12h1v1h-1zM8 13h1v1H8zM10 14h1v1h-1zM12 15h1v1h-1zM9 16h1v1H9zM11 17h1v1h-1zM13 18h1v1h-1zM8 19h1v1H8zM10 20h1v1h-1zM12 19h1v1h-1zM15 14h1v1h-1zM17 15h1v1h-1zM19 14h1v1h-1zM16 16h1v1h-1zM18 17h1v1h-1zM20 16h1v1h-1zM14 18h1v1h-1zM16 19h1v1h-1zM18 20h1v1h-1zM20 19h1v1h-1zM15 20h1v1h-1z"/></svg>');
 const AS_DL = QS.get('as') === 'dl';
 const demoPic = (emoji, bg) => 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="' + bg + '"/><text x="60" y="80" font-size="60" text-anchor="middle">' + emoji + '</text></svg>');
+const DEMO_LIMIT = { 'G-101': [2, 1], 'G-102': [1, 1] };   // 示範：每年限購、今年已買
 const demoDb = {
   catalog: [
     { sku: 'G-101', cat: '剪定工具', name: '修枝剪 8 吋', spec: 'SK5 刀刃', unit: '支', img: demoPic('✂️', '#e3f1e7'), avail: 12, isNew: false, prices: { '員工價': 280, '廠商價': 330, '一般價': 420 } },
@@ -927,15 +965,17 @@ function demoApi(action, p) {
   const R = x => Promise.resolve(x);
   if (action === 'init') return R({ ok: true, registered: true,
     user: AS_DL ? { name: '大葉總務', identity: '總務帳號', dept: '', canProxy: true, proxyOnly: true, canCreate: true, canPhoto: true } : { name: '示範員工', identity: '在職', dept: '辦公室', canProxy: false, canPhoto: false },
-    vendors: ['廠商辛'], catalog: demoDb.catalog.map(c => Object.assign({}, c, { price: c.prices['員工價'] }, AS_DL ? {} : { prices: undefined })),
+    vendors: ['廠商辛'], catalog: demoDb.catalog.map(c => Object.assign({}, c, { price: c.prices['員工價'] }, AS_DL ? {} : { prices: undefined },
+      AS_DL || !DEMO_LIMIT[c.sku] ? {} : { limit: DEMO_LIMIT[c.sku][0], bought: DEMO_LIMIT[c.sku][1] })),
     orders: demoDb.orders, todo: AS_DL ? demoDb.todo : [] });
   if (action === 'submit') {
     const id = 'EP261117-0' + (10 + demoDb.orders.length);
     const lines = p.items.map(i => { const c = demoDb.catalog.find(x => x.sku === i.sku); return { name: c.name, qty: i.qty, unit: c.unit, sub: c.prices[p.proxy ? (p.proxy.type === '合作廠商' ? '廠商價' : '一般價') : '員工價'] * i.qty, isNew: c.isNew }; });
     const total = lines.reduce((s, l) => s + l.sub, 0);
-    const price = !!p.priceReq || lines.some(l => l.isNew);
-    demoDb.orders.unshift({ id: id, time: '11/17 18:50', buyer: p.proxy ? p.proxy.name : '示範員工', identity: p.proxy ? p.proxy.type : '在職', total: total, pay: '', status: price ? '待確認價格' : '待付款', reason: '', hint: price ? '等待價格確認，確認後就可以付款' : '請到 bot 聊天室付款，或到總務那裡現場付款', act: '', canCancel: true, lines: lines });
-    return R({ ok: true, orderId: id, total: total, next: price ? 'price' : (p.proxy ? 'collect' : 'pay') });
+    const price = !!p.priceReq || lines.some(l => l.isNew) || !!p.extra;
+    window.__extra = p.extra;
+    demoDb.orders.unshift({ id: id, time: '11/17 18:50', buyer: p.proxy ? p.proxy.name : '示範員工', identity: p.proxy ? p.proxy.type : '在職', total: total, pay: '', status: price ? '待確認價格' : '待付款', reason: '', hint: price ? '等待' + (p.extra ? '加購' : '價格') + '確認，確認後就可以付款' : '請到 bot 聊天室付款，或到總務那裡現場付款', act: '', canCancel: true, lines: lines });
+    return R({ ok: true, orderId: id, total: total, next: price ? 'price' : (p.proxy ? 'collect' : 'pay'), extra: !!p.extra });
   }
   if (action === 'newProduct') {
     const sku = 'NEW-00' + (demoDb.catalog.filter(c => c.isNew).length + 1);
@@ -968,10 +1008,15 @@ function demoApi(action, p) {
     if (!p.photo) return R({ ok: false, error: '請先拍交貨照片（客人拿走的東西）' });
     window.__slip = p.image; window.__photo = p.photo; window.__photoNote = p.photoNote; return R({ ok: true, orderId: p.orderId, warnings: [] });
   }
+  if (action === 'priceInfo' && p.orderId === 'extra') return R({ ok: true, reasons: ['不同意加購', '價格不同意', '此商品暫不開放購買', '庫存不足', '其他（請洽管理部）'],
+    order: { id: 'EP261120-005', buyer: '員工丁', identity: '在職', proxyBy: '', tier: '員工價', reason: '', total: 560,
+      extra: '修枝剪 8 吋 SK5 刀刃 ×2（今年已買 2，每年限購 2）', extraReason: '幫家人買',
+      lines: [{ sku: 'G-101', name: '修枝剪 8 吋', spec: 'SK5 刀刃', unit: '支', qty: 2, price: 280, orig: 280, req: 0, isNew: false }] } });
   if (action === 'priceInfo') return R({ ok: true, reasons: ['價格不同意', '此商品暫不開放購買', '庫存不足', '其他（請洽管理部）'],
     order: { id: p.orderId, buyer: '廠商辛', identity: '合作廠商', proxyBy: '大葉總務', tier: '廠商價', reason: '老客戶，量多', total: 2600,
       lines: [{ sku: 'NEW-001', name: '不鏽鋼水桶', spec: '10L', unit: '個', qty: 4, price: 300, orig: 300, req: 0, isNew: true },
               { sku: 'G-102', name: '高枝剪', spec: '伸縮 2–3 m', unit: '支', qty: 1, price: 1100, orig: 1100, req: 950, isNew: false }] } });
+  if (action === 'priceConfirm' && p.orderId === 'EP261120-005') return R({ ok: true, total: p.prices['G-101'] * 2 });
   if (action === 'priceConfirm') return R({ ok: true, total: Object.keys(p.prices).reduce((s, k) => s + p.prices[k] * (k === 'NEW-001' ? 4 : 1), 0) });
   if (action === 'priceReject') return R({ ok: true });
   if (action === 'cancel') { const o = demoDb.orders.find(x => x.id === p.orderId); if (o) { o.status = '已取消'; o.canCancel = false; o.hint = ''; } return R({ ok: true }); }
