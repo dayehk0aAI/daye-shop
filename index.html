@@ -167,6 +167,42 @@
   .cambar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px calc(18px + env(safe-area-inset-bottom)); }
   .camtxt { color: #fff; font-size: 16px; padding: 10px 6px; min-width: 70px; text-align: center; cursor: pointer; background: none; }
   .shutter { width: 72px; height: 72px; border-radius: 50%; background: #fff; border: 6px solid rgba(255,255,255,.4); background-clip: padding-box; }
+  /* 入庫（大葉總務）、入庫確認頁 */
+  .subseg { display: flex; gap: 6px; padding: 2px 16px 10px; }
+  .subseg button { padding: 8px 15px; border-radius: 10px; border: 1px solid var(--line); font-size: 15px; }
+  .subseg button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; }
+  .badge.s-待確認 { color: #b7791f; } .badge.s-已入庫 { color: var(--accent); } .badge.s-已退回 { color: var(--danger); }
+  small.hint3 { color: var(--hint); font-size: 12.5px; font-weight: 400; }
+  .list > .linkbtn { margin-top: 0; }
+  .backlink { display: block; color: var(--accent); font-weight: 600; font-size: 15px; padding: 4px 0 6px; margin-left: -2px; }
+  .tip { margin: 4px 12px 10px; padding: 10px 12px; border-radius: 12px; background: rgba(47, 125, 79, .1); color: var(--accent); font-size: 13.5px; }
+  .srow { background: var(--card); border-radius: 14px; padding: 8px 6px 10px 10px; }
+  .srow.on { box-shadow: inset 0 0 0 2px var(--accent); }
+  .srow-top { display: flex; align-items: center; gap: 10px; }
+  .sidx { width: 22px; height: 22px; flex: none; border-radius: 50%; background: var(--bg); color: var(--hint); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .sidx.on { background: var(--accent); color: var(--on-accent); }
+  .xbtn { width: 40px; height: 40px; flex: none; color: var(--hint); font-size: 16px; }
+  .srow-q { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 0 6px 0 32px; font-size: 13px; color: var(--hint); }
+  .srow-q input, .pkq input { width: 84px; margin: 0; flex: none; text-align: center; font-weight: 700; font-size: 17px; padding: 8px 4px; }
+  .safter { margin-left: auto; color: var(--accent); font-weight: 700; white-space: nowrap; }
+  .sbox { flex: 1; min-width: 0; } .sbox input { margin: 0; -webkit-appearance: none; appearance: none; }
+  .sbox.page { margin: 2px 12px 4px; }
+  .sugg { margin: 6px 6px 0 32px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .sitem { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+  .sitem:last-child { border-bottom: 0; } .sitem.dim { opacity: .55; }
+  .sitem .go { color: var(--accent); font-weight: 700; font-size: 13px; white-space: nowrap; }
+  .shint { padding: 10px 12px; font-size: 13px; color: var(--hint); }
+  .pickrow2 { display: flex; gap: 8px; padding: 0 12px; } .pickrow2 .linkbtn { flex: 1; }
+  .stnote { margin: 14px 12px 0; }
+  .item.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+  .info-col small.blk { display: block; } .zero { color: #b7791f; font-weight: 600; }
+  .pkq { width: 84px; flex: none; text-align: center; }
+  .pkq small { display: block; margin-top: 2px; min-height: 17px; font-size: 12px; font-weight: 700; color: var(--accent); }
+  .cnote { margin-top: 6px; font-size: 13px; font-weight: 600; color: #8a5a12; }
+  input.chg { border-color: #b7791f; background: rgba(183, 121, 31, .08); }
+  input[data-ci] { text-align: center; font-weight: 700; font-size: 17px; }
+  .srow-q input, .pkq input, input[data-ci] { -moz-appearance: textfield; }
+  .srow-q input::-webkit-inner-spin-button, .pkq input::-webkit-inner-spin-button, input[data-ci]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -317,6 +353,7 @@ function render() {
     return;
   }
   const u = d.user;
+  if (ST.open && u.canProxy && hasStock()) { $app.innerHTML = ST.pick ? stockPickHtml() : stockFormHtml(); return; }   // 新增入庫單
   if (S.tab === 'todo' && !u.canProxy) S.tab = 'shop';
   let h = '<header><h1>大葉員購</h1><p>' + esc(u.name) + '・' + esc(u.identity) + (u.dept ? '・' + esc(u.dept) : '') + '</p></header>';
   const tabs = [['shop', '選購'], ['orders', '我的訂單' + (d.orders.length ? '（' + d.orders.length + '）' : '')]];
@@ -452,9 +489,224 @@ function ordersHtml() {
   return '<div class="list">' + os.map(o => orderCardHtml(o, o.buyer !== S.data.user.name)).join('') + '</div>';
 }
 function todoHtml() {
+  let h = '';
+  if (hasStock()) {   // 待處理分成「收款・交貨」和「入庫」
+    const n = S.data.todo.length;
+    h += '<div class="subseg"><button data-stseg="orders" class="' + (ST.seg === 'orders' ? 'on' : '') + '">收款・交貨' + (n ? '（' + n + '）' : '') + '</button>' +
+      '<button data-stseg="stock" class="' + (ST.seg === 'stock' ? 'on' : '') + '">入庫</button></div>';
+    if (ST.seg === 'stock') return h + stockListHtml();
+  }
   const os = S.data.todo;
-  if (!os.length) return '<div class="empty">目前沒有要收款或交貨的訂單</div>';
-  return '<div class="list">' + os.map(o => orderCardHtml(o, true)).join('') + '</div>';
+  if (!os.length) return h + '<div class="empty">目前沒有要收款或交貨的訂單</div>';
+  return h + '<div class="list">' + os.map(o => orderCardHtml(o, true)).join('') + '</div>';
+}
+
+// ===================== 入庫（大葉總務）=====================
+// 待處理 › 入庫：入庫單清單。新增入庫單一次可以多項：打字搜尋品號／品名，或從產品清單看照片選；
+// 送出後 bot 私訊入庫確認的人（管理者、陳秀敏等），確認後才加進庫存。
+
+const ST = { seg: 'orders', open: false, pick: false, rows: [], adding: true, q: '', note: '', cat: '全部', pq: '', pickQty: {}, busy: false };
+const GRID_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px">' +
+  '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
+
+function hasStock() { return !!(S.data && Array.isArray(S.data.stockCatalog)); }
+function stockSku(sku) {
+  return S.data.stockCatalog.find(p => p.sku === sku) || { sku: sku, name: sku, spec: '', unit: '', stock: 0, img: '', cat: '', missing: true };
+}
+function reviewerText() { const n = S.data.stockReviewers || []; return n.length ? n.join('或') : '入庫確認的人'; }
+const qn = v => { const n = Math.floor(Number(v)); return n > 0 ? n : 0; };
+function stockSum(rows) { return rows.reduce((s, r) => s + qn(r.qty), 0); }
+function afterText(p, v) { const q = qn(v); return q ? '入庫後 ' + (p.stock + q) : ''; }
+/** 品號、品名、規格都可以搜，空白隔開的每個字都要有 */
+function stockMatches(q) {
+  const keys = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!keys.length) return [];
+  return S.data.stockCatalog.filter(p => { const hay = (p.sku + ' ' + p.name + ' ' + p.spec).toLowerCase(); return keys.every(k => hay.indexOf(k) !== -1); });
+}
+
+function stockListHtml() {
+  const list = S.data.stockins || [];
+  let h = '<div class="list"><button class="linkbtn" id="stNew">＋ 新增入庫單（一次可以多項）' + (ST.rows.length ? '・草稿 ' + ST.rows.length + ' 項' : '') + '</button>';
+  if (!list.length) h += '<div class="empty">還沒有入庫單</div>';
+  return h + list.map(stockCardHtml).join('') + '</div>';
+}
+function stockQtyText(l) {
+  if (l.conf === null || l.conf === undefined) return l.qty + esc(l.unit);
+  if (l.conf === 0) return '0' + esc(l.unit) + '（不入庫，原 ' + l.qty + '）';
+  return l.conf + esc(l.unit) + (l.conf !== l.qty ? '（原 ' + l.qty + '）' : '');
+}
+function stockCardHtml(s) {
+  const st = s.status;
+  let h = '<div class="order"><div class="top"><b>' + esc(s.id) + '</b><span class="badge s-' + esc(st) + '">' + esc(st) + '</span></div>';
+  if (st === '待確認') h += '<div class="who">已送' + esc(reviewerText()) + '確認，確認後才會加進庫存</div>';
+  if (st === '已退回') h += '<div class="note-bad" style="margin:6px 0 0">退回原因：' + esc(s.reason) + '（' + esc(s.by) + '）</div>';
+  h += '<ul>' + s.lines.map(l => '<li>' + esc(l.name) + (l.spec ? ' ' + esc(l.spec) : '') + ' × ' + stockQtyText(l) + '</li>').join('') + '</ul>';
+  if (s.note) h += '<div class="who" style="margin:-2px 0 8px">備註：' + esc(s.note) + '</div>';
+  h += '<div class="foot"><span>' + esc(s.time) + '　<b>共 ' + s.total + ' 件</b>' +
+    (st === '已入庫' ? '<br><small class="hint3">' + esc(s.by) + ' ' + esc(s.byTime) + ' 確認</small>' : '') +
+    (st === '已撤回' ? '<br><small class="hint3">已撤回</small>' : '') + '</span><span class="btns">' +
+    (st === '待確認' ? '<button class="ghost" data-stwd="' + esc(s.id) + '">撤回</button>' : '') +
+    (st === '已退回' || st === '已撤回' ? '<button class="mini" data-stre="' + esc(s.id) + '">改好再送</button>' : '') +
+    '</span></div></div>';
+  return h;
+}
+
+function stockFormHtml() {
+  let h = '<header><button class="backlink" id="stBack">‹ 待處理</button><h1>新增入庫單</h1><p>' + esc(S.data.user.name) + '・' + esc(reviewerText()) + '確認後，才會加進庫存</p></header>';
+  h += '<div class="tip">可以一次輸入多項：打品號或品名搜尋，或按「從產品清單選」看照片挑。</div><div class="list">';
+  h += ST.rows.map(stockRowHtml).join('');
+  if (ST.adding) h += stockSearchHtml();
+  h += '</div><div class="pickrow2">' + (ST.adding ? '' : '<button class="linkbtn" id="stAdd">＋ 打字加一項</button>') +
+    '<button class="linkbtn" id="stPick">' + GRID_ICON + ' 從產品清單選</button></div>';
+  h += '<label class="fld stnote">備註（選填）<input id="stNote" maxlength="200" placeholder="例如：11/24 工廠送來、送貨單號" value="' + esc(ST.note) + '"></label>';
+  h += '<div class="bar"><div class="sum"><small id="stCount">入庫單・' + ST.rows.length + ' 項</small><b id="stTotal">共 ' + stockSum(ST.rows) + ' 件</b></div>' +
+    '<button class="cta" id="stSubmit"' + (ST.busy ? ' disabled' : '') + '>' + (ST.busy ? '送出中…' : '送出確認') + '</button></div>';
+  return h;
+}
+function stockRowHtml(r, i) {
+  const p = stockSku(r.sku);
+  return '<div class="srow"><div class="srow-top"><span class="sidx">' + (i + 1) + '</span><div class="lthumb">📦' + imgHtml(p.img, true) + '</div>' +
+    '<div class="info-col"><b>' + esc(p.name) + (p.off ? ' <span class="tag">未上架</span>' : '') + '</b><small>' + esc(p.sku) + (p.spec ? '・' + esc(p.spec) : '') +
+    (p.missing ? '・<span class="zero">產品資料裡找不到</span>' : '・目前 ' + p.stock + esc(p.unit)) + '</small></div>' +
+    '<button class="xbtn" data-strm="' + i + '" aria-label="刪除第 ' + (i + 1) + ' 項">✕</button></div>' +
+    '<div class="srow-q"><label for="sq' + i + '">入庫數量</label><input id="sq' + i + '" type="number" inputmode="numeric" min="1" step="1" enterkeyhint="next" data-sq="' + i +
+    '" value="' + esc(r.qty) + '" placeholder="數量"><span>' + esc(p.unit) + '</span><span class="safter" id="sa' + i + '">' + afterText(p, r.qty) + '</span></div></div>';
+}
+function stockSearchHtml() {
+  const n = ST.rows.length + 1;
+  return '<div class="srow on"><div class="srow-top"><span class="sidx on">' + n + '</span>' +
+    '<div class="sbox"><input id="stQ" type="search" enterkeyhint="search" autocomplete="off" placeholder="打品號或品名，例如 G-10、水管" value="' + esc(ST.q) +
+    '" aria-label="第 ' + n + ' 項的品號或品名"></div>' + (ST.rows.length ? '<button class="xbtn" id="stQx" aria-label="不加這一項">✕</button>' : '') + '</div>' +
+    '<div class="sugg" id="stSugg">' + suggHtml() + '</div></div>';
+}
+function suggHtml() {
+  if (!ST.q.trim()) return '<div class="shint">打幾個字就會跳出產品</div>';
+  const list = stockMatches(ST.q);
+  if (!list.length) return '<div class="shint">找不到「' + esc(ST.q.trim()) + '」，產品資料裡要先有這個產品</div>';
+  return list.slice(0, 8).map(p => {
+    const at = ST.rows.findIndex(r => r.sku === p.sku);
+    return '<button class="sitem' + (at >= 0 ? ' dim' : '') + '" data-stsel="' + esc(p.sku) + '"><div class="lthumb">📦' + imgHtml(p.img) + '</div>' +
+      '<span class="info-col"><b>' + esc(p.name) + (p.off ? ' <span class="tag">未上架</span>' : '') + '</b><small>' + esc(p.sku) + (p.spec ? '・' + esc(p.spec) : '') +
+      (at >= 0 ? '・已在第 ' + (at + 1) + ' 項' : '・目前 ' + p.stock + esc(p.unit)) + '</small></span>' + (at >= 0 ? '' : '<span class="go">選這個</span>') + '</button>';
+  }).join('') + (list.length > 8 ? '<div class="shint">還有 ' + (list.length - 8) + ' 項，請多打幾個字</div>' : '');
+}
+function updateStockMeta() {
+  if ($('stCount')) $('stCount').textContent = '入庫單・' + ST.rows.length + ' 項';
+  if ($('stTotal')) $('stTotal').textContent = '共 ' + stockSum(ST.rows) + ' 件';
+}
+
+function openStockForm() {
+  ST.open = true; ST.pick = false;
+  if (!ST.rows.length) ST.adding = true;
+  render(); window.scrollTo(0, 0);
+}
+function selectStock(sku) {
+  const at = ST.rows.findIndex(r => r.sku === sku);
+  if (at >= 0) {
+    const el = $('sq' + at);
+    if (el) { el.focus(); el.scrollIntoView({ block: 'center' }); }
+    return toast('已經在第 ' + (at + 1) + ' 項，直接改數量就好');
+  }
+  ST.rows.push({ sku: sku, qty: '' });
+  ST.q = '';   // 搜尋列留著，填完數量可以接著打下一項
+  render();
+  const el = $('sq' + (ST.rows.length - 1));
+  if (el) el.focus();
+}
+
+// 從產品清單選：在清單填的數量先放在 pickQty，按「加入入庫單」（或返回）時合併回入庫單
+function openPick() {
+  ST.pickQty = {};
+  ST.rows.forEach(r => { if (qn(r.qty)) ST.pickQty[r.sku] = String(qn(r.qty)); });
+  ST.pick = true; ST.pq = ''; ST.cat = '全部';
+  render(); window.scrollTo(0, 0);
+}
+function mergedRows() {
+  const has = sku => Object.prototype.hasOwnProperty.call(ST.pickQty, sku);
+  const out = [];
+  ST.rows.forEach(r => {
+    if (!has(r.sku)) return out.push(r);
+    const q = qn(ST.pickQty[r.sku]);
+    if (q) out.push({ sku: r.sku, qty: String(q) });   // 清單上清空的就拿掉
+  });
+  Object.keys(ST.pickQty).forEach(sku => {
+    const q = qn(ST.pickQty[sku]);
+    if (q && !ST.rows.some(r => r.sku === sku)) out.push({ sku: sku, qty: String(q) });
+  });
+  return out;
+}
+function closePick() {
+  ST.rows = mergedRows();
+  ST.pick = false; ST.q = ''; ST.adding = !ST.rows.length;
+  render(); window.scrollTo(0, 0);
+  if (ST.rows.length) toast('入庫單現在有 ' + ST.rows.length + ' 項');
+}
+function stockPickHtml() {
+  const cats = ['全部'].concat([...new Set(S.data.stockCatalog.map(p => p.cat))]);
+  let h = '<header><button class="backlink" id="stPickBack">‹ 入庫單</button><h1>從產品清單選</h1><p>看照片挑，在要入庫的產品填數量，可以一次選很多項</p></header>';
+  h += '<div class="sbox page"><input id="stPq" type="search" autocomplete="off" placeholder="搜尋品號或品名" value="' + esc(ST.pq) + '" aria-label="搜尋品號或品名"></div>';
+  if (cats.length > 2) h += '<div class="chips">' + cats.map(c => '<button data-stcat="' + esc(c) + '" class="' + (c === ST.cat ? 'on' : '') + '">' + esc(c) + '</button>').join('') + '</div>';
+  h += '<div class="list" id="stPlist">' + pickListHtml() + '</div>';
+  const m = mergedRows();
+  h += '<div class="bar"><div class="sum"><small id="stPcount">已選 ' + m.length + ' 項</small><b id="stPtotal">共 ' + stockSum(m) + ' 件</b></div>' +
+    '<button class="cta" id="stPickDone">加入入庫單</button></div>';
+  return h;
+}
+function pickListHtml() {
+  const k = ST.pq.trim();
+  const list = (k ? stockMatches(k) : S.data.stockCatalog).filter(p => ST.cat === '全部' || p.cat === ST.cat);
+  if (!list.length) return '<div class="empty">' + (k ? '找不到「' + esc(k) + '」' : '這個分類沒有產品') + '</div>';
+  return list.map(p => {
+    const v = ST.pickQty[p.sku] === undefined ? '' : ST.pickQty[p.sku];
+    return '<div class="item pk' + (qn(v) ? ' sel' : '') + '" id="pk_' + esc(p.sku) + '"><div class="thumb">📦' + imgHtml(p.img, true) + '</div>' +
+      '<div class="info-col"><b>' + esc(p.name) + (p.off ? ' <span class="tag">未上架</span>' : '') + '</b>' +
+      '<small class="blk">' + esc(p.sku) + (p.spec ? '・' + esc(p.spec) : '') + '</small>' +
+      '<small class="blk' + (p.stock ? '' : ' zero') + '">目前庫存 ' + p.stock + esc(p.unit) + '</small></div>' +
+      '<div class="pkq"><input type="number" inputmode="numeric" min="0" step="1" data-pk="' + esc(p.sku) + '" value="' + esc(v) + '" placeholder="數量" aria-label="' +
+      esc(p.name) + '的入庫數量"><small id="pa_' + esc(p.sku) + '">' + afterText(p, v) + '</small></div></div>';
+  }).join('');
+}
+function updatePickMeta() {
+  const m = mergedRows();
+  if ($('stPcount')) $('stPcount').textContent = '已選 ' + m.length + ' 項';
+  if ($('stPtotal')) $('stPtotal').textContent = '共 ' + stockSum(m) + ' 件';
+}
+
+async function submitStock() {
+  if (ST.busy) return;
+  if (!ST.rows.length) return toast('請先加入要入庫的產品');
+  const bad = ST.rows.findIndex(r => !qn(r.qty) || Number(r.qty) !== qn(r.qty));
+  if (bad >= 0) {
+    const el = $('sq' + bad);
+    if (el) { el.focus(); el.scrollIntoView({ block: 'center' }); }
+    return toast('第 ' + (bad + 1) + ' 項的數量要是 1 以上的整數');
+  }
+  ST.busy = true; render();   // 按下後立刻停用按鈕，避免重複送出
+  let r;
+  try { r = await api('stockSubmit', { items: ST.rows.map(x => ({ sku: x.sku, qty: qn(x.qty) })), note: ST.note.trim() }); }
+  catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  ST.busy = false;
+  if (!r.ok) { toast(r.error); return r.refresh ? load() : render(); }
+  ST.rows = []; ST.note = ''; ST.q = ''; ST.adding = true; ST.open = false;
+  buzz('medium');
+  center('入庫單已送出', '入庫單 ' + esc(r.id) + '　共 ' + r.count + ' 項・' + r.total + ' 件<br>已通知 ' + esc((r.reviewers || []).join('、')) + ' 確認，確認後才會加進庫存。' +
+    (r.warning ? '<br><span class="warn">' + esc(r.warning) + '</span>' : ''), ['stDone', '回到入庫單']);
+}
+async function withdrawStock(id) {
+  if (!(await ask('確定要撤回入庫單 ' + id + ' 嗎？撤回後確認的人就不用處理了。'))) return;
+  let r;
+  try { r = await api('stockWithdraw', { id: id }); } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  toast(r.ok ? '已撤回 ' + id : r.error);
+  load();
+}
+async function redoStock(id) {
+  const s = (S.data.stockins || []).find(x => x.id === id);
+  if (!s) return;
+  if (ST.rows.length && !(await ask('入庫單草稿還有 ' + ST.rows.length + ' 項，要換成 ' + id + ' 的內容嗎？'))) return;
+  ST.rows = s.lines.map(l => ({ sku: l.sku, qty: String(l.qty) }));
+  ST.note = s.note || ''; ST.q = ''; ST.adding = false; ST.open = true; ST.pick = false;
+  render(); window.scrollTo(0, 0);
+  toast('已帶入 ' + id + ' 的品項，改好後再送出');
 }
 
 async function submit() {
@@ -793,6 +1045,85 @@ async function rejectPrice() {
   center('已駁回', '訂單 ' + esc(o.id) + '：' + esc(reason), ['prClose', '關閉']);
 }
 
+// ===================== 入庫確認頁（入庫確認的人：管理者、陳秀敏等）=====================
+// bot 入庫申請的「✏️ 修改數量」打開這頁（網址 ?stockin=入庫單號），可以逐項改數量（0＝不入庫）或退回
+
+const SIN = { info: null, busy: false };
+
+async function openStockin(id) {
+  $app.innerHTML = '<div class="center">載入中…</div>';
+  let r;
+  try { r = await api('stockInfo', { id: id }); } catch (e) { r = { ok: false, error: '連線失敗，請稍後再試' }; }
+  if (!r.ok) return center('無法開啟入庫確認', esc(r.error), ['cClose', '關閉']);
+  SIN.info = r; SIN.busy = false;
+  renderStockin();
+}
+function sinInputs() { return [...document.querySelectorAll('[data-ci]')]; }
+function sinValid(v) { const n = Number(v); return String(v).trim() !== '' && n >= 0 && Math.floor(n) === n; }
+function sinQtys() { const ins = sinInputs(); return SIN.info.stockin.lines.map((l, i) => (ins[i] ? ins[i].value : String(l.qty))); }
+function sinTotal() { return sinQtys().reduce((s, v) => s + (sinValid(v) ? Number(v) : 0), 0); }
+function renderStockin() {
+  const s = SIN.info.stockin;
+  const orig = s.lines.reduce((t, l) => t + l.qty, 0);
+  let h = '<div class="signwrap"><div class="slip"><h2>入庫確認</h2>';
+  h += '<div class="sub">' + esc(s.id) + '　' + esc(s.by) + '　' + esc(s.time) + '</div>';
+  if (s.note) h += '<div class="okline" style="margin-top:4px">備註：' + esc(s.note) + '</div>';
+  h += s.lines.map((l, i) => '<div class="pline"><div class="srow-top"><div class="lthumb">📦' + imgHtml(l.img, true) + '</div><div class="info-col">' +
+    '<div class="pname">' + esc(l.name) + (l.spec ? ' ' + esc(l.spec) : '') + '</div><div class="pmeta">' + esc(l.sku) + '・總務填 ' + l.qty + esc(l.unit) +
+    '・目前庫存 ' + l.stock + esc(l.unit) + '</div></div></div>' +
+    '<div class="pin"><label for="ci' + i + '">確認數量</label><input id="ci' + i + '" type="number" inputmode="numeric" min="0" step="1" data-ci="' + i + '" value="' + l.qty + '">' +
+    '<span>' + esc(l.unit) + '</span><span class="psub" id="ca' + i + '">入庫後 ' + (l.stock + l.qty) + '</span></div><div class="cnote" id="cn' + i + '" hidden></div></div>').join('');
+  h += '<div class="total"><span>合計 ' + s.lines.length + ' 項</span><span class="amt" id="cTotal">' + orig + ' 件</span></div>';
+  h += '<div class="reqsum" style="color:var(--hint);font-weight:400">總務填 ' + orig + ' 件</div>';
+  h += '<div class="info">數量填 0＝這項不入庫。確認後才會加進「產品庫存」並留下入庫紀錄；改過的數量會通知總務，也會寫在審核群組。</div>';
+  h += '<div class="err" id="cErr"></div><div class="actions"><button class="cta" id="cConfirm">確認入庫（' + orig + ' 件）</button></div>';
+  h += '<details><summary>退回這張入庫單</summary><select id="cReason">' + SIN.info.reasons.map(x => '<option>' + esc(x) + '</option>').join('') +
+    '</select><div class="actions"><button class="danger" id="cReject">退回</button></div></details>';
+  h += '</div></div>';
+  $app.innerHTML = h;
+}
+function updateStockinPage(i) {
+  const l = SIN.info.stockin.lines[i], inp = sinInputs()[i], v = inp.value;
+  const ok = sinValid(v), n = ok ? Number(v) : 0, changed = !ok || n !== l.qty;
+  $('ca' + i).textContent = ok ? (n ? '入庫後 ' + (l.stock + n) : '不入庫') : '';
+  inp.classList.toggle('chg', changed);
+  const note = $('cn' + i);
+  note.hidden = !changed;
+  note.textContent = !ok ? '請填 0 以上的整數' : n === 0 ? '這項不入庫（總務填 ' + l.qty + '）' : '已改：總務填 ' + l.qty + ' → 確認 ' + n + '（會通知總務）';
+  const t = sinTotal();
+  $('cTotal').textContent = t + ' 件';
+  $('cConfirm').textContent = '確認入庫（' + t + ' 件）';
+  $('cErr').textContent = '';
+}
+async function confirmStockin() {
+  if (SIN.busy) return;
+  const s = SIN.info.stockin, vals = sinQtys(), qtys = {};
+  for (let i = 0; i < s.lines.length; i++) {
+    if (!sinValid(vals[i])) return void ($('cErr').textContent = s.lines[i].name + ' 的數量要是 0 以上的整數');
+    qtys[s.lines[i].sku] = Number(vals[i]);
+  }
+  if (!Object.keys(qtys).some(k => qtys[k] > 0)) return void ($('cErr').textContent = '每一項都是 0；不入庫請按下面的「退回」');
+  const btn = $('cConfirm');
+  SIN.busy = true; btn.disabled = true; btn.textContent = '送出中…';
+  let r;
+  try { r = await api('stockConfirm', { id: s.id, qtys: qtys }); } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  SIN.busy = false;
+  if (!r.ok) { btn.disabled = false; btn.textContent = '確認入庫（' + sinTotal() + ' 件）'; $('cErr').textContent = r.error; return; }
+  buzz('medium');
+  center('已確認入庫', '入庫單 ' + esc(s.id) + '　共 ' + r.total + ' 件<br>庫存已更新，已通知總務，也貼到審核群組了。', ['cClose', '關閉']);
+}
+async function rejectStockin() {
+  if (SIN.busy) return;
+  const s = SIN.info.stockin, reason = $('cReason').value;
+  if (!(await ask('確定要退回入庫單 ' + s.id + ' 嗎？（' + reason + '）'))) return;
+  SIN.busy = true;
+  let r;
+  try { r = await api('stockReject', { id: s.id, reason: reason }); } catch (e) { r = { ok: false, error: '連線失敗，請再試一次' }; }
+  SIN.busy = false;
+  if (!r.ok) return void ($('cErr').textContent = r.error);
+  center('已退回', '入庫單 ' + esc(s.id) + '：' + esc(reason) + '<br>已通知總務。', ['cClose', '關閉']);
+}
+
 // ===================== 事件 =====================
 
 $app.addEventListener('click', async e => {
@@ -802,6 +1133,24 @@ $app.addEventListener('click', async e => {
   if (!t) return;
   const ds = t.dataset;
   if (ds.cam) return openCamera(ds.cam);
+  // ----- 入庫 -----
+  if (ds.stseg) { ST.seg = ds.stseg; return render(); }
+  if (t.id === 'stNew') return openStockForm();
+  if (t.id === 'stBack') { ST.open = false; S.tab = 'todo'; ST.seg = 'stock'; render(); return window.scrollTo(0, 0); }
+  if (t.id === 'stAdd') { ST.adding = true; ST.q = ''; render(); if ($('stQ')) $('stQ').focus(); return; }
+  if (t.id === 'stQx') { ST.adding = false; ST.q = ''; return render(); }
+  if (ds.stsel) return selectStock(ds.stsel);
+  if (ds.strm !== undefined) { ST.rows.splice(Number(ds.strm), 1); if (!ST.rows.length) ST.adding = true; return render(); }
+  if (t.id === 'stPick') return openPick();
+  if (ds.stcat) { ST.cat = ds.stcat; return render(); }
+  if (t.id === 'stPickBack' || t.id === 'stPickDone') return closePick();
+  if (t.id === 'stSubmit') return submitStock();
+  if (t.id === 'stDone') { ST.seg = 'stock'; S.tab = 'todo'; return load(); }
+  if (ds.stwd) return withdrawStock(ds.stwd);
+  if (ds.stre) return redoStock(ds.stre);
+  if (t.id === 'cConfirm') return confirmStockin();
+  if (t.id === 'cReject') return rejectStockin();
+  if (t.id === 'cClose') { if (tg && tg.close && !DEMO) return tg.close(); return load(); }
   if (ds.tab) { S.tab = ds.tab; S.sheet = ''; if (ds.tab !== 'shop') load(); return render(); }
   if (ds.cat) { S.cat = ds.cat; return render(); }
   if (ds.inc) { S.cart[ds.inc] = (S.cart[ds.inc] || 0) + 1; buzz(); return render(); }
@@ -847,6 +1196,36 @@ $app.addEventListener('input', e => {
     const l = PRICE.info.order.lines[Number(t.dataset.pi)];
     $('psub' + t.dataset.pi).textContent = money(Math.round(Number(t.value) || 0) * l.qty);
     $('pTotal').textContent = money(priceTotal());
+  }
+  // ----- 入庫：打字時只更新需要的地方，不重畫整頁（輸入框才不會失去焦點）-----
+  if (t.id === 'stQ') { ST.q = t.value; if ($('stSugg')) $('stSugg').innerHTML = suggHtml(); }
+  if (t.dataset.sq !== undefined) {
+    const i = Number(t.dataset.sq);
+    if (ST.rows[i]) { ST.rows[i].qty = t.value; $('sa' + i).textContent = afterText(stockSku(ST.rows[i].sku), t.value); updateStockMeta(); }
+  }
+  if (t.id === 'stNote') ST.note = t.value;
+  if (t.id === 'stPq') { ST.pq = t.value; $('stPlist').innerHTML = pickListHtml(); }
+  if (t.dataset.pk !== undefined) {
+    const sku = t.dataset.pk;
+    ST.pickQty[sku] = t.value;
+    if ($('pk_' + sku)) $('pk_' + sku).classList.toggle('sel', !!qn(t.value));
+    if ($('pa_' + sku)) $('pa_' + sku).textContent = afterText(stockSku(sku), t.value);
+    updatePickMeta();
+  }
+  if (t.dataset.ci !== undefined) updateStockinPage(Number(t.dataset.ci));
+});
+// 入庫單：在搜尋框按 Enter 選第一個產品；在數量格按 Enter 跳到下一項的搜尋框（電腦版用鍵盤比較快）
+$app.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  const t = e.target;
+  if (t.id === 'stQ') {
+    e.preventDefault();
+    const p = stockMatches(ST.q).find(x => !ST.rows.some(r => r.sku === x.sku));
+    if (p) selectStock(p.sku);
+  } else if (t.dataset && t.dataset.sq !== undefined) {
+    e.preventDefault();
+    if (!ST.adding) { ST.adding = true; ST.q = ''; render(); }
+    if ($('stQ')) $('stQ').focus();
   }
 });
 
@@ -937,7 +1316,8 @@ $('camShot').addEventListener('click', snap);
 $('camAlbum').addEventListener('click', () => setTimeout(closeCamera, 300));
 
 // ===================== 預覽用假資料：網址加 ?demo 就能在一般瀏覽器看畫面 =====================
-// ?demo（員工）、?demo&as=dl（大葉總務）、?demo&pay=EP261117-004（收款頁）、?demo&price=EP261117-005（價格確認頁）
+// ?demo（員工）、?demo&as=dl（大葉總務，待處理 › 入庫）、?demo&pay=EP261117-004（收款頁）、?demo&price=EP261117-005（價格確認頁）
+// ?demo&stockin=IN261124-001（入庫確認頁）
 const DEMO_QR = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/><path fill-rule="evenodd" d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2z"/><path d="M9 0h1v1H9zM11 0h1v1h-1zM12 1h1v1h-1zM8 2h1v1H8zM10 2h1v1h-1zM9 3h1v1H9zM12 3h1v1h-1zM8 4h1v1H8zM11 4h1v1h-1zM10 5h1v1h-1zM9 6h1v1H9zM12 6h1v1h-1zM0 9h1v1H0zM2 8h1v1H2zM4 9h1v1H4zM6 10h1v1H6zM1 11h1v1H1zM3 12h1v1H3zM5 11h1v1H5zM8 8h1v1H8zM10 9h1v1h-1zM12 8h1v1h-1zM9 10h1v1H9zM11 11h1v1h-1zM13 9h1v1h-1zM15 8h1v1h-1zM17 9h1v1h-1zM19 8h1v1h-1zM20 10h1v1h-1zM16 11h1v1h-1zM18 12h1v1h-1zM14 12h1v1h-1zM8 13h1v1H8zM10 14h1v1h-1zM12 15h1v1h-1zM9 16h1v1H9zM11 17h1v1h-1zM13 18h1v1h-1zM8 19h1v1H8zM10 20h1v1h-1zM12 19h1v1h-1zM15 14h1v1h-1zM17 15h1v1h-1zM19 14h1v1h-1zM16 16h1v1h-1zM18 17h1v1h-1zM20 16h1v1h-1zM14 18h1v1h-1zM16 19h1v1h-1zM18 20h1v1h-1zM20 19h1v1h-1zM15 20h1v1h-1z"/></svg>');
 const AS_DL = QS.get('as') === 'dl';
 const demoPic = (emoji, bg) => 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="' + bg + '"/><text x="60" y="80" font-size="60" text-anchor="middle">' + emoji + '</text></svg>');
@@ -960,6 +1340,19 @@ const demoDb = {
   ],
   cash: 'none', polls: 0
 };
+// 入庫示範資料：產品清單（含未上架）和入庫單
+const DEMO_STOCK = { 'G-101': 12, 'G-102': 3, 'G-201': 20, 'G-202': 0, 'G-301': 6 };
+demoDb.stockCatalog = demoDb.catalog.map(c => ({ sku: c.sku, cat: c.cat, name: c.name, spec: c.spec, unit: c.unit, img: c.img, stock: DEMO_STOCK[c.sku] || 0, off: false }))
+  .concat([{ sku: 'G-401', cat: '配件', name: '修枝剪刀套', spec: '皮革', unit: '個', img: '', stock: 0, off: true }]);
+demoDb.stockins = [
+  { id: 'IN261124-001', time: '11/24 18:40', status: '待確認', total: 46, note: '11/24 工廠送來，送貨單 No.0458', reason: '', by: '', byTime: '',
+    lines: [{ sku: 'G-101', name: '修枝剪 8 吋', spec: 'SK5 刀刃', unit: '支', qty: 20, conf: null }, { sku: 'G-201', name: '園藝鏟三件組', spec: '不鏽鋼', unit: '組', qty: 10, conf: null },
+            { sku: 'G-301', name: '伸縮水管 15 m', spec: '附七段噴頭', unit: '條', qty: 16, conf: null }] },
+  { id: 'IN261122-001', time: '11/22 10:15', status: '已入庫', total: 5, note: '', reason: '', by: '陳秀敏', byTime: '11/22 10:40',
+    lines: [{ sku: 'G-102', name: '高枝剪', spec: '伸縮 2–3 m', unit: '支', qty: 5, conf: 5 }] },
+  { id: 'IN261120-001', time: '11/20 16:30', status: '已退回', total: 10, note: '', reason: '數量不符', by: '陳秀敏', byTime: '11/20 16:52',
+    lines: [{ sku: 'G-202', name: '除草鐮刀', spec: '', unit: '支', qty: 10, conf: null }] }
+];
 function demoApi(action, p) {
   const tier = AS_DL ? '一般價' : '員工價';
   const R = x => Promise.resolve(x);
@@ -967,7 +1360,24 @@ function demoApi(action, p) {
     user: AS_DL ? { name: '大葉總務', identity: '總務帳號', dept: '', canProxy: true, proxyOnly: true, canCreate: true, canPhoto: true } : { name: '示範員工', identity: '在職', dept: '辦公室', canProxy: false, canPhoto: false },
     vendors: ['廠商辛'], catalog: demoDb.catalog.map(c => Object.assign({}, c, { price: c.prices['員工價'] }, AS_DL ? {} : { prices: undefined },
       AS_DL || !DEMO_LIMIT[c.sku] ? {} : { limit: DEMO_LIMIT[c.sku][0], bought: DEMO_LIMIT[c.sku][1] })),
-    orders: demoDb.orders, todo: AS_DL ? demoDb.todo : [] });
+    orders: demoDb.orders, todo: AS_DL ? demoDb.todo : [],
+    stockCatalog: AS_DL ? demoDb.stockCatalog : undefined, stockins: AS_DL ? demoDb.stockins : undefined, stockReviewers: AS_DL ? ['葉蔓', '陳秀敏'] : undefined });
+  if (action === 'stockSubmit') {
+    const id = 'IN261124-00' + (demoDb.stockins.filter(s => /^IN261124/.test(s.id)).length + 1);
+    const lines = p.items.map(i => { const c = demoDb.stockCatalog.find(x => x.sku === i.sku); return { sku: c.sku, name: c.name, spec: c.spec, unit: c.unit, qty: i.qty, conf: null }; });
+    const total = lines.reduce((s, l) => s + l.qty, 0);
+    demoDb.stockins.unshift({ id: id, time: '11/24 19:05', status: '待確認', total: total, note: p.note || '', reason: '', by: '', byTime: '', lines: lines });
+    window.__stock = p;
+    return R({ ok: true, id: id, count: lines.length, total: total, reviewers: ['葉蔓', '陳秀敏'], warning: '' });
+  }
+  if (action === 'stockWithdraw') { const s = demoDb.stockins.find(x => x.id === p.id); if (s) { s.status = '已撤回'; s.by = '大葉總務'; } return R({ ok: true }); }
+  if (action === 'stockInfo') {
+    const s = demoDb.stockins.find(x => x.id === p.id) || demoDb.stockins[0];
+    return R({ ok: true, reasons: ['數量不符', '品號錯了', '還沒收到貨', '其他'], stockin: { id: s.id, by: '大葉總務', time: s.time, note: s.note,
+      lines: s.lines.map(l => { const c = demoDb.stockCatalog.find(x => x.sku === l.sku) || {}; return { sku: l.sku, name: l.name, spec: l.spec, unit: l.unit, qty: l.qty, stock: c.stock || 0, img: c.img || '' }; }) } });
+  }
+  if (action === 'stockConfirm') { window.__stockConfirm = p; return R({ ok: true, total: Object.keys(p.qtys).reduce((s, k) => s + p.qtys[k], 0) }); }
+  if (action === 'stockReject') { window.__stockReject = p; return R({ ok: true }); }
   if (action === 'submit') {
     const id = 'EP261117-0' + (10 + demoDb.orders.length);
     const lines = p.items.map(i => { const c = demoDb.catalog.find(x => x.sku === i.sku); return { name: c.name, qty: i.qty, unit: c.unit, sub: c.prices[p.proxy ? (p.proxy.type === '合作廠商' ? '廠商價' : '一般價') : '員工價'] * i.qty, isNew: c.isNew }; });
@@ -1026,11 +1436,12 @@ function demoApi(action, p) {
 // ===================== 啟動 =====================
 if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
 const SP = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
-const ROUTE = /^pay_/.test(SP) ? ['pay', SP.slice(4)] : /^price_/.test(SP) ? ['price', SP.slice(6)]
-  : QS.get('pay') ? ['pay', QS.get('pay')] : QS.get('price') ? ['price', QS.get('price')] : null;
+const ROUTE = /^pay_/.test(SP) ? ['pay', SP.slice(4)] : /^price_/.test(SP) ? ['price', SP.slice(6)] : /^stockin_/.test(SP) ? ['stockin', SP.slice(8)]
+  : QS.get('pay') ? ['pay', QS.get('pay')] : QS.get('price') ? ['price', QS.get('price')] : QS.get('stockin') ? ['stockin', QS.get('stockin')] : null;
 if (!DEMO && (!tg || !tg.initData)) center('無法開啟員購', '請從 Telegram 的員購 bot 開啟這個頁面');
 else if (ROUTE && ROUTE[0] === 'pay') openPay(ROUTE[1]);
 else if (ROUTE && ROUTE[0] === 'price') openPrice(ROUTE[1]);
+else if (ROUTE && ROUTE[0] === 'stockin') openStockin(ROUTE[1]);
 else load();
 </script>
 </body>
